@@ -1,0 +1,5 @@
+/.idea/
+/data/external/*
+/analysis/__pycache__
+**/.ipynb_checkpoints/**
+data/acclimate_output/**
