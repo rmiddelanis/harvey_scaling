@@ -1,4 +1,7 @@
+import copy
 import json
+import string
+
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -7,7 +10,10 @@ import os
 import sys
 sys.path.append("../")
 from data.calc_initial_forcing_intensity_HARVEY import plot_polygon, load_hwm, alpha_shape, alpha
+from analysis.dataformat import AggrData
+from scipy.interpolate import interp1d, RectBivariateSpline
 import matplotlib as mpl
+from scipy.ndimage import gaussian_filter, zoom
 
 rootdir = os.path.join(os.getenv("HOME"), 'repos/harvey_scaling/')
 
@@ -178,6 +184,158 @@ def plot_radius_extension_impact(_outfile=None):
     plt.show()
     if isinstance(_outfile, str):
         fig.savefig(_outfile, dpi=300)
+
+
+def prepare_heatmap_figure(_data: AggrData, _type: str, _x_ax: bool, _scale_factor=1.0, gmt_anomaly_0=1.0,
+                           _sst_gmt_factor=1.0, _numbering=None):
+    fig_width = MAX_FIG_WIDTH_WIDE * 0.8 * _scale_factor
+    if _x_ax:
+        fig_height = MAX_FIG_WIDTH_WIDE * _scale_factor * 0.5
+        ax_bbox_y1 = 0.2 / _scale_factor
+    else:
+        fig_height = MAX_FIG_WIDTH_WIDE * _scale_factor * 0.45
+        ax_bbox_y1 = 0.05 / _scale_factor
+    ax_bbox_x1 = 0.15 / _scale_factor
+    ax_bbox_x2 = 1 - 0.17 / _scale_factor
+    ax_width = ax_bbox_x2 - ax_bbox_x1
+    dist_ax_cbar = 0.02
+    cbar_width = 0.02
+    cbar_bbox_x1 = ax_bbox_x1 + ax_width + dist_ax_cbar
+    ax_height = 0.99 - ax_bbox_y1
+    ax_bbox = (ax_bbox_x1, ax_bbox_y1, ax_width, ax_height)
+    cbar_bbox = (cbar_bbox_x1, ax_bbox_y1, cbar_width, ax_height)
+    print(ax_bbox, "\n", cbar_bbox)
+    fig = plt.figure(figsize=(fig_width, fig_height))
+    ax, cbar_ax = fig.add_axes(ax_bbox), fig.add_axes(cbar_bbox)
+    if _type == 'heatmap_cut':
+        cbar_ax.remove()
+    if _type == 'heatmap':
+        ax.tick_params(axis='y', labelrotation=0)
+        ax.set_ylim(-0.5, len(_data.get_lambda_axis()) - 0.5)
+        ax.set_yticks(np.arange(0, len(_data.get_lambda_axis()), 1))
+        ax.set_yticklabels([int(l) for l in _data.get_lambda_axis() / 1e3])
+        ax.set_ylabel('radius change (km)')
+    if _x_ax:
+        ax.set_xlim(-0.5, len(_data.get_duration_axis()) - 0.5)
+        ax.set_xlim(-0.5, len(_data.get_duration_axis()) - 0.5)
+        ax.set_xticks(np.arange(0, len(_data.get_duration_axis()), 1))
+        ax.set_xticklabels(["{0:1.2f}".format(gmt_anomaly_0 + d / _sst_gmt_factor) for d in _data.get_duration_axis()])
+        ax.tick_params(axis='x', labelrotation=90)
+        ax.set_xlabel('global mean temperature anomaly\n$(\degree C)$')
+    else:
+        ax.set_xlabel('')
+        ax.set_xticklabels([])
+        # ax.set_xlim(0, len(_data.get_duration_axis()) - 0.5)
+        ax.set_xticks(np.arange(0, len(_data.get_duration_axis()), 1))
+    if _numbering is not None:
+        fig.text(0, 1, _numbering, ha='left', va='top', fontweight='bold')
+    return fig, ax, cbar_ax
+
+
+def make_heatmap(_data: AggrData, _agg_method: str, base_point=None, contour_distance=None, _gauss_filter=True,
+                 _gauss_sigma=1, _gauss_truncate=1, _outfile=None, _slopes=None, _plot_cuts=False, _label=None,
+                 _sst_gmt_factor=1.0, **kwargs):
+    print('first', _sst_gmt_factor)
+    if _data.shape()[0] != 1 or _data.shape()[1] != 1 or _data.shape()[2] != 1:
+        raise ValueError("All dimensions of the dataset except lambda and duration and time must be 1.")
+    fig, ax, cbar_ax = prepare_heatmap_figure(_data, _type='heatmap', _x_ax=(not _plot_cuts),
+                                              _sst_gmt_factor=_sst_gmt_factor, _numbering='a')
+    _data_aggregated = copy.deepcopy(_data.clip(1))
+    if _agg_method == 'sum':
+        _data_aggregated.data_capsule.data = _data.get_data().sum(axis=-1, keepdims=True)
+    elif _agg_method == 'min':
+        _data_aggregated.data_capsule.data = _data.get_data().min(axis=-1, keepdims=True)
+    elif _agg_method == 'max':
+        _data_aggregated.data_capsule.data = _data.get_data().max(axis=-1, keepdims=True)
+    data_array = _data_aggregated.get_data().reshape((len(_data.get_lambda_axis()), len(_data.get_duration_axis())))
+    data_filtered = gaussian_filter(data_array, sigma=_gauss_sigma, mode='nearest', truncate=_gauss_truncate)
+    if _gauss_filter:
+        plot_data = data_filtered
+    else:
+        plot_data = data_array
+    im = ax.imshow(plot_data, origin='lower', aspect='auto')
+    cbar = fig.colorbar(im, cax=cbar_ax, orientation='vertical')
+    cbar.set_label(_label)
+    if contour_distance is not None:
+        contour_data = zoom(data_filtered, 3)
+        vmax = data_array.max()
+        vmin = data_array.min()
+        levels = np.arange(vmin, vmax, contour_distance)
+        contours = ax.contour(contour_data, levels, colors='k', origin='lower',
+                              extent=(-0.5, plot_data.shape[1] - 0.5, -0.5, plot_data.shape[0] - 0.5))
+    if base_point is None:
+        duration_0, lambda_0 = 0, 0  # base point duration is in degC CHANGE compared to the unscaled hurricane, not in degC global temperature anomaly
+    else:
+        duration_0, lambda_0 = base_point
+    base_x = np.where(_data_aggregated.get_duration_axis() == duration_0)[0][0]
+    base_y = np.where(_data_aggregated.get_lambda_axis() == lambda_0)[0][0]
+    base_z = _data_aggregated.get_durationvals(duration_0).get_lambdavals(lambda_0).get_data().flatten()[0]
+    if _slopes is not None:
+        for idx, slope in enumerate(sorted(_slopes, reverse=True)):
+            d_i = (_data_aggregated.get_lambda_axis()[-1] - _data_aggregated.get_lambda_axis()[0]) / len(
+                _data_aggregated.get_lambda_axis())
+            d_d = (_data_aggregated.get_duration_axis()[-1] - _data_aggregated.get_duration_axis()[0]) / len(
+                _data_aggregated.get_duration_axis())
+            m = slope * d_d / d_i / _sst_gmt_factor  # slopes are in km/degC GMT change -> translate into km/degC SST change
+            b = base_y - m * base_x
+            x_max = min(len(_data_aggregated.get_duration_axis()) - 1,
+                        ((len(_data_aggregated.get_lambda_axis()) - 1) - b) / m)
+            y_max = m * x_max + b
+            ax.plot([base_x, x_max], [m * base_x + b, y_max], c='w')
+            ax.text(base_x + (x_max - base_x) / 2, m * (base_x + (x_max - base_x) / 2) + b, string.ascii_uppercase[idx],
+                    c='w')
+    ax.plot(base_x, base_y, marker='x', markersize=8, color='k')
+    ax.text(base_x, base_y, '\n({0:1.3f})'.format(base_z), color='k', fontsize=FSIZE_SMALL, ha='center', va='top')
+    if _plot_cuts:
+        make_heatmap_cut(_data_aggregated, _agg_method, _slopes, _gauss_filter=_gauss_filter, _gauss_sigma=_gauss_sigma,
+                         _plot_xax=True, _gauss_truncate=_gauss_truncate, _label=_label, _duration_0=duration_0,
+                         _sst_gmt_factor=_sst_gmt_factor, **kwargs)
+    plt.tight_layout()
+    if _outfile is not None:
+        fig.savefig(_outfile, dpi=300)
+    plt.show()
+
+
+def make_heatmap_cut(_data: AggrData, _agg_method: str, _slopes, _outfile=None, _gauss_filter=True, _gauss_sigma=1,
+                     _gauss_truncate=1, _plot_xax=True, _show_baseline=False, _label=None, _sst_gmt_factor=1.0,
+                     _duration_0=0):
+    if _data.shape()[0] != 1 or _data.shape()[1] != 1 or _data.shape()[2] != 1:
+        raise ValueError("All dimensions of the dataset except lambda and duration and time must be 1.")
+
+    fig, ax, _ = prepare_heatmap_figure(_data, _type='heatmap_cut', _x_ax=_plot_xax, _sst_gmt_factor=_sst_gmt_factor,
+                                        _numbering='b')
+    if _agg_method == 'sum':
+        data_array = _data.get_data().sum(axis=-1, keepdims=True)
+    elif _agg_method == 'min':
+        data_array = _data.get_data().min(axis=-1, keepdims=True)
+    elif _agg_method == 'max':
+        data_array = _data.get_data().max(axis=-1, keepdims=True)
+    data_array = data_array.reshape((len(_data.get_lambda_axis()), len(_data.get_duration_axis())))
+    if _gauss_filter:
+        data_array = gaussian_filter(data_array, sigma=_gauss_sigma, mode='nearest', truncate=_gauss_truncate)
+    interp = RectBivariateSpline(_data.get_lambda_axis(), _data.get_duration_axis(), data_array, s=0)
+    for idx, slope in enumerate(sorted(_slopes, reverse=True)):
+        durations = _data.get_duration_axis()[_data.get_duration_axis() >= _duration_0]
+        x_offset = len(_data.get_duration_axis()[_data.get_duration_axis() < _duration_0])
+        lambdas = durations * slope / _sst_gmt_factor  # slopes are in km/degC GMT change. Therefore, translate into km/degC SST change:
+        lambdas = lambdas[lambdas <= _data.get_lambda_axis()[-1]]
+        durations = durations[:len(lambdas)]
+        z = [interp(lambdas[i], durations[i])[0, 0] for i in range(len(durations))]
+        ax.plot(np.arange(len(durations)) + x_offset, z,
+                label=string.ascii_uppercase[idx] + ": m = {0:1.0f} km / $\degree C$".format(_slopes[idx] / 1e3))
+    if _show_baseline:
+        if (_data.get_data()[..., 0].flatten() != _data.get_data()[..., 0].flatten()[0]).sum() == 0:
+            if _agg_method == 'sum':
+                factor = _data.get_sim_duration()
+            elif _agg_method in ['min', 'max']:
+                factor = 1
+            if _show_baseline:
+                ax.axhline(y=_data.get_data()[..., 0].flatten()[0] * factor, linestyle='--', label='baseline')
+        else:
+            print('Warning. Ambiguous baseline values. Baseline not shown')
+    ax.set_ylabel(_label)
+    ax.legend()
+    plt.show()
 
 
 if __name__ == '__main__':

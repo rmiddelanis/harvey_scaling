@@ -58,7 +58,8 @@ class DataReader:
         result_mask = np.ctypeslib.as_array(mask_array_shared)
         result = np.ma.array(result_data, mask=result_mask)
 
-        return AggrData(result, np.array(self.vars), self.region_groups, self.sector_groups)
+        return AggrData(result, np.array(self.vars), self.region_groups, self.sector_groups, np.array(self.lambda_axis),
+                        np.array(self.duration_axis))
 
     def read_file(self, lambda_value_, duration_value_):
         l_ = np.where(self.lambda_axis == lambda_value_)[0]

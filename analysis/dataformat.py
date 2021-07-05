@@ -1,15 +1,25 @@
 import numpy as np
-from netCDF4 import Dataset
+import sys
+import pandas as pd
 
-from .utils import get_index_list
+sys.path.append('/home/robinmid/repos/hurricanes_hindcasting_remake/analysis')
+sys.path.append('/home/robin/repos/hurricanes_hindcasting_remake/analysis')
+from analysis.utils import get_index_list, detect_stationarity_and_offset_in_series, calc_ts_characteristic
 
 
 class DataCapsule:
-    def __init__(self, _data: np.ndarray, _variables: np.ndarray, _regions: dict, _sectors: dict, ):
+    def __init__(self, _data: np.ndarray, _variables: np.ndarray, _regions: dict, _sectors: dict,
+                 _lambda_axis: np.ndarray, _duration_axis: np.ndarray):
         if type(_data) is not np.ma.core.MaskedArray:
             raise ValueError("_data must be of type np.ndarray.")
         if type(_variables) is not np.ndarray:
             raise ValueError("_variables must be of type np.ndarray.")
+        if type(_lambda_axis) is not np.ndarray:
+            raise ValueError("_lambda_axis must be of type np.ndarray.")
+        if type(_duration_axis) is not np.ndarray:
+            raise ValueError("_duration_axis must be of type np.ndarray.")
+        self.duration_axis = _duration_axis
+        self.lambda_axis = _lambda_axis
         self.sectors = _sectors
         self.regions = _regions
         self.variables = _variables
@@ -24,11 +34,11 @@ class AggrData:
             if type(args[0]).__name__ == "DataCapsule":
                 self.data_capsule = args[0]
             else:
-                raise TypeError('Must pass argument of type DataCapsule or four arguments')
-        elif len(args) == 4:
+                raise TypeError('Must pass argument of type DataCapsule or six arguments')
+        elif len(args) == 6:
             self.data_capsule = DataCapsule(*args)
         else:
-            raise TypeError('Must pass one argument of type DataCapsule or four arguments')
+            raise TypeError('Must pass one argument of type DataCapsule or six arguments')
         self.base_damage = _base_damage
         self.base_forcing = _base_forcing
         self.scaled_scenarios = _scaled_scenarios
@@ -43,7 +53,8 @@ class AggrData:
             vars_indices = get_index_list(_vars, self.data_capsule.variables)
             data_new = self.data_capsule.data[vars_indices, ...]
             return AggrData(data_new, self.data_capsule.variables[vars_indices], self.data_capsule.regions,
-                            self.data_capsule.sectors, _base_damage=self.base_damage,
+                            self.data_capsule.sectors, self.data_capsule.lambda_axis,
+                            self.data_capsule.duration_axis, _base_damage=self.base_damage,
                             _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
 
     def get_regions(self, _regions=None):
@@ -60,8 +71,8 @@ class AggrData:
                     regions_new[_region] = self.data_capsule.regions[_region]
             data_new = self.data_capsule.data[:, regions_indices, ...]
             return AggrData(data_new, self.data_capsule.variables, regions_new, self.data_capsule.sectors,
-                            _base_damage=self.base_damage, _base_forcing=self.base_forcing,
-                            _scaled_scenarios=self.scaled_scenarios)
+                            self.data_capsule.lambda_axis, self.data_capsule.duration_axis,
+                            _base_damage=self.base_damage, _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
 
     def get_sectors(self, _sectors=None):
         if _sectors is None:
@@ -77,8 +88,42 @@ class AggrData:
                     sectors_new[_sector] = self.data_capsule.sectors[_sector]
             data_new = self.data_capsule.data[:, :, sectors_indices, ...]
             return AggrData(data_new, self.data_capsule.variables, self.data_capsule.regions, sectors_new,
-                            _base_damage=self.base_damage, _base_forcing=self.base_forcing,
-                            _scaled_scenarios=self.scaled_scenarios)
+                            self.data_capsule.lambda_axis, self.data_capsule.duration_axis,
+                            _base_damage=self.base_damage, _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+
+    def get_lambdavals(self, _lambdavals=None):
+        if _lambdavals is None:
+            return self.data_capsule.lambda_axis
+        else:
+            if not isinstance(_lambdavals, (list, tuple, np.ndarray)):
+                _lambdavals = [_lambdavals]
+            _lambdavals = np.array(_lambdavals)
+            lambda_indices = get_index_list(_lambdavals, self.data_capsule.lambda_axis)
+            data_new = self.data_capsule.data[..., lambda_indices, :, :]
+            return AggrData(data_new, self.data_capsule.variables, self.data_capsule.regions, self.data_capsule.sectors,
+                            self.data_capsule.lambda_axis[lambda_indices],
+                            self.data_capsule.duration_axis, _base_damage=self.base_damage,
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+
+    def get_durationvals(self, _durationvals=None):
+        if _durationvals is None:
+            return self.data_capsule.duration_axis
+        else:
+            if not isinstance(_durationvals, (list, tuple, np.ndarray)):
+                _durationvals = [_durationvals]
+            _durationvals = np.array(_durationvals)
+            duration_indices = get_index_list(_durationvals, self.data_capsule.duration_axis)
+            data_new = self.data_capsule.data[..., duration_indices, :]
+            return AggrData(data_new, self.data_capsule.variables, self.data_capsule.regions, self.data_capsule.sectors,
+                            self.data_capsule.lambda_axis,
+                            self.data_capsule.duration_axis[duration_indices], _base_damage=self.base_damage,
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+
+    def get_duration_axis(self):
+        return self.data_capsule.duration_axis
+
+    def get_lambda_axis(self):
+        return self.data_capsule.lambda_axis
 
     def clip(self, *args):
         if len(args) == 1:
@@ -90,8 +135,8 @@ class AggrData:
         else:
             raise ValueError('Must pass at least one argument _from or both _from and _to')
         return AggrData(self.data_capsule.data[..., _from:_to], self.data_capsule.variables, self.data_capsule.regions,
-                        self.data_capsule.sectors, _base_damage=self.base_damage, _base_forcing=self.base_forcing,
-                        _scaled_scenarios=self.scaled_scenarios)
+                        self.data_capsule.sectors, self.data_capsule.lambda_axis,
+                        self.data_capsule.duration_axis, _base_damage=self.base_damage, _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
 
     def get_data(self):
         return self.data_capsule.data
@@ -104,7 +149,7 @@ class AggrData:
 
     def add_var(self, _data, _name, _inplace=False):
         if _data.shape[1:-1] != self.get_data().shape[1:-1]:
-            raise ValueError('Must pass array same dimensions in region, sector and duration!')
+            raise ValueError('Must pass array same dimensions in region, sector, lambda and duration!')
         if _data.shape[-1] < self.get_data().shape[-1]:
             raise UserWarning('Attention. New variable is shorter than existing data. Will mask remaining time steps.')
         new_dim = np.ma.masked_all((1,) + self.get_data().shape[1:])
@@ -116,7 +161,8 @@ class AggrData:
             self.data_capsule.variables = np.concatenate([self.data_capsule.variables, np.array([_name])])
         else:
             return AggrData(data_new, vars_new, self.data_capsule.regions,
-                            self.data_capsule.sectors, _base_damage=self.base_damage,
+                            self.data_capsule.sectors, self.data_capsule.lambda_axis,
+                            self.data_capsule.duration_axis, _base_damage=self.base_damage,
                             _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
 
     def drop_var(self, _name, _inplace=False):
@@ -130,7 +176,8 @@ class AggrData:
             self.data_capsule.variables = vars_new
         else:
             return AggrData(data_new, vars_new, self.data_capsule.regions,
-                            self.data_capsule.sectors, _base_damage=self.base_damage,
+                            self.data_capsule.sectors, self.data_capsule.lambda_axis,
+                            self.data_capsule.duration_axis, _base_damage=self.base_damage,
                             _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
 
     def calc_prices(self, vars=None, _inplace=False):
@@ -153,7 +200,8 @@ class AggrData:
                 vars_new = np.concatenate([vars_new, np.array([var + "_value"])])
             data_new = np.ma.concatenate([self.get_data(), data_new], axis=0)
             return AggrData(data_new, vars_new, self.data_capsule.regions,
-                            self.data_capsule.sectors, _base_damage=self.base_damage,
+                            self.data_capsule.sectors, self.data_capsule.lambda_axis,
+                            self.data_capsule.duration_axis, _base_damage=self.base_damage,
                             _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
 
     def calc_eff_prod_capacity(self, _inplace=False):
@@ -174,7 +222,8 @@ class AggrData:
             data_new = np.ma.concatenate([self.get_data(), data_new], axis=0)
             vars_new = np.concatenate([self.get_vars(), np.array(['effective_production_capacity'])])
             return AggrData(data_new, vars_new, self.data_capsule.regions,
-                            self.data_capsule.sectors, _base_damage=self.base_damage,
+                            self.data_capsule.sectors, self.data_capsule.lambda_axis,
+                            self.data_capsule.duration_axis, _base_damage=self.base_damage,
                             _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
 
     def calc_eff_forcing(self, _inplace=False):
@@ -225,7 +274,8 @@ class AggrData:
             data_new = np.ma.concatenate([self.get_data(), data_new], axis=0)
             vars_new = np.concatenate([self.get_vars(), np.array(['demand_exceedence'])])
             return AggrData(data_new, vars_new, self.data_capsule.regions,
-                            self.data_capsule.sectors, _base_damage=self.base_damage,
+                            self.data_capsule.sectors, self.data_capsule.lambda_axis,
+                            self.data_capsule.duration_axis, _base_damage=self.base_damage,
                             _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
 
     def calc_demand_production_gap(self, _inplace=False):
@@ -245,7 +295,8 @@ class AggrData:
             data_new = np.ma.concatenate([self.get_data(), data_new], axis=0)
             vars_new = np.concatenate([self.get_vars(), np.array(['demand_production_gap'])])
             return AggrData(data_new, vars_new, self.data_capsule.regions,
-                            self.data_capsule.sectors, _base_damage=self.base_damage,
+                            self.data_capsule.sectors, self.data_capsule.lambda_axis,
+                            self.data_capsule.duration_axis, _base_damage=self.base_damage,
                             _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
 
     def calc_desired_overproduction_capacity(self, _inplace=False):
@@ -256,8 +307,7 @@ class AggrData:
             print(
                 'Variables \'desired_production_capacity\' and \'forcing\' required to calculate desired_overproduction_capacity. Doing nothing.')
             return
-        des_overprod_capac = self.get_vars('desired_production_capacity').get_data() - self.get_vars(
-            'forcing').get_data() + 1
+        des_overprod_capac = self.get_vars('desired_production_capacity').get_data() - self.get_vars('forcing').get_data() + 1
         if _inplace:
             self.add_var(des_overprod_capac, 'desired_overproduction_capacity', _inplace=True)
         else:
@@ -266,52 +316,52 @@ class AggrData:
             data_new = np.ma.concatenate([self.get_data(), data_new], axis=0)
             vars_new = np.concatenate([self.get_vars(), np.array(['desired_overproduction_capacity'])])
             return AggrData(data_new, vars_new, self.data_capsule.regions,
-                            self.data_capsule.sectors, _base_damage=self.base_damage,
+                            self.data_capsule.sectors, self.data_capsule.lambda_axis,
+                            self.data_capsule.duration_axis, _base_damage=self.base_damage,
                             _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+
+    def aggregate(self, _method, **kwargs):
+        data_new = np.ma.masked_all(self.shape()[:-1] + (1,))
+        data_new[...] = np.expand_dims(
+            np.ma.apply_along_axis(lambda x: calc_ts_characteristic(x, _method, **kwargs), -1, self.get_data()), -1)
+        return AggrData(data_new, self.data_capsule.variables, self.data_capsule.regions,
+                        self.data_capsule.sectors, self.data_capsule.lambda_axis,
+                        self.data_capsule.duration_axis, _base_damage=self.base_damage,
+                        _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
 
 
 def have_equal_shape(data1: AggrData, data2: AggrData):
     return (np.all(data1.get_vars() == data2.get_vars()) and
             np.all(data1.get_regions() == data1.get_regions()) and
             np.all(data1.get_sectors() == data2.get_sectors()) and
+            np.all(data1.get_durationvals() == data2.get_durationvals()) and
+            np.all(data1.get_lambdavals() == data2.get_lambdavals()) and
             np.all(data1.shape() == data2.shape()))
 
 
-def read_file(_filename, _vars, _region_groups: dict, _sector_groups: dict, _time_frame):
-    try:
-        dataset = Dataset(_filename, "r", format="NETCDF4")
-    except Exception as e:
-        print("File {} could not be loaded.".format(_filename))
-        print(e)
-        return
-    sim_duration = len(dataset.variables['time'])
-    if _time_frame == -1:
-        _time_frame = sim_duration
-    elif sim_duration < _time_frame:
-        print("Dataset {} contains less time steps ({}) than requested ({}). Continue with dataset length instead, "
-              "mask remaining length.".format(_filename, sim_duration, _time_frame))
-        _time_frame = sim_duration
-    data_array = np.zeros((len(_vars), len(_region_groups), len(_sector_groups), _time_frame))
-    mask_array = data_array != 0
-    region_indices = {}
-    sector_indices = {}
-    for v, var in enumerate(_vars):
-        _data = dataset["/agents/" + var.replace('/', '')][:].data
-        _data = np.ma.array(_data, mask=np.isnan(_data), fill_value=0)
-        for r, region_group_name in enumerate(_region_groups):
-            if region_group_name in region_indices.keys():
-                region_index = region_indices[region_group_name]
-            else:
-                region_index = get_index_list(_region_groups[region_group_name], dataset["/region"][:])
-                region_indices[region_group_name] = region_index
-            for s, sector_group_name in enumerate(_sector_groups):
-                if sector_group_name in sector_indices.keys():
-                    sector_index = sector_indices[sector_group_name]
-                else:
-                    sector_index = get_index_list(_sector_groups[sector_group_name], dataset["/sector"][:])
-                    sector_indices[sector_group_name] = sector_index
-                v_r_s_series = np.sum(np.sum(_data[:_time_frame, sector_index, :][:, :, region_index], axis=1), axis=1)
-                data_array[v, r, s, :_time_frame] = v_r_s_series
-                mask_array[v, r, s, _time_frame:] = data_array[v, r, s, _time_frame:] == 0
-    dataset.close()
-    return AggrData(np.ma.core.array(data_array, mask = mask_array), np.array(_vars), _region_groups, _sector_groups)
+# v r s l d
+def calc_dataset_stationarity_and_offset(_data: AggrData, **kwargs):
+    df = pd.DataFrame(columns=['variable', 'region', 'sector', 'lambda', 'duration', 'num_seq', 'from', 'to', 'offset'])
+    for v in _data.get_vars():
+        for r in _data.get_regions():
+            for s in _data.get_sectors():
+                for l in _data.get_lambda_axis():
+                    for d in _data.get_duration_axis():
+                        ts = _data.get_vars(v).get_regions(r).get_sectors(s).get_lambdavals(l).get_durationvals(
+                            d).get_data().flatten()
+                        segment_and_offset, recursion_round = detect_stationarity_and_offset_in_series(ts, **kwargs)
+                        if len(segment_and_offset) == 0:
+                            print("Attention. No stationary segment found for var = {}, r = {}, s = {}, l = {}, "
+                                  "d = {}".format(v, r, s, l, d))
+                        elif recursion_round > 0:
+                            print(
+                                "Attention. Stationary segment for var = {}, r = {}, s = {}, l = {}, d = {} only found "
+                                "in recurion round {} with _threshold = . Consider choosing a different _threshold "
+                                "value next time".format(v, r, s, l, d, recursion_round,
+                                                         kwargs.get('_threshold') * np.power(2, recursion_round)))
+                        for seq_idx in range(len(segment_and_offset)):
+                            df.loc[len(df)] = [v, r, s, l, d, seq_idx] + list(segment_and_offset[seq_idx])
+    index = pd.MultiIndex.from_frame(df[['variable', 'region', 'sector', 'lambda', 'duration', 'num_seq']])
+    columns = ['from', 'to', 'offset']
+    df = pd.DataFrame(df[['from', 'to', 'offset']].to_numpy(), index=index, columns=columns).sort_index()
+    return df
