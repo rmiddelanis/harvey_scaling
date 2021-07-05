@@ -24,11 +24,11 @@ class AggrData:
             if type(args[0]).__name__ == "DataCapsule":
                 self.data_capsule = args[0]
             else:
-                raise TypeError('Must pass argument of type DataCapsule or six arguments')
+                raise TypeError('Must pass argument of type DataCapsule or four arguments')
         elif len(args) == 4:
             self.data_capsule = DataCapsule(*args)
         else:
-            raise TypeError('Must pass one argument of type DataCapsule or six arguments')
+            raise TypeError('Must pass one argument of type DataCapsule or four arguments')
         self.base_damage = _base_damage
         self.base_forcing = _base_forcing
         self.scaled_scenarios = _scaled_scenarios
