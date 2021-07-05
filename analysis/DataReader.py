@@ -9,7 +9,7 @@ import timeit
 
 sys.path.append('/home/robinmid/repos/harvey_scaling/')
 sys.path.append('/home/robin/repos/harvey_scaling/')
-from analysis.utils import WORLD_REGIONS, SECTOR_GROUPS, get_axes_and_dirs, pickle_data, load_pickle_data, \
+from analysis.utils import WORLD_REGIONS, SECTOR_GROUPS, get_axes_and_dirs, pickle_data, \
     get_regions_dict, get_sectors_dict, make_figure_dir, get_index_list
 from analysis.dataformat import AggrData
 

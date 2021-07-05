@@ -1,7 +1,7 @@
 import numpy as np
 from netCDF4 import Dataset
 
-from utils import get_index_list
+from .utils import get_index_list
 
 
 class DataCapsule:
