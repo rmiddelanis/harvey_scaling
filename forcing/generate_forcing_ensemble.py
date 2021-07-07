@@ -48,19 +48,27 @@ def write_ncdf_output(_forcing_curves, _sector_list, _out_dir, _out_name, max_le
 
 # scale f0 with geographic extent
 # scale tau with precipitation
-def get_forcing_curve(_t0=0, _state='TX', _t_r_bi_initial=60, _f_r_bi=0.001, _t_max=1000, _radius_extension=0,
-                      _temperature_change=0):
+def get_forcing_curves(_t0=0, _state='TX', _t_r_init=60, _f_r=0.001, _t_max=1000, _re=0, _dT=0):
     forcing_params_path = os.path.join(home_dir, "repos/harvey_scaling/data/generated/initial_forcing_params.json")
-    f0_m = json.load(open(forcing_params_path, 'rb'))['params'][_state]['m']
-    f0_c = json.load(open(forcing_params_path, 'rb'))['params'][_state]['c']
-    f0 = f0_c + f0_m * _radius_extension
+    forcing_curves = {}
+    forcing_params = {}
+    t_r = _t_r_init * (1.07 ** _dT)
     days = np.arange(_t_max - _t0)
-    tau_bi = (-_t_r_bi_initial / np.log(_f_r_bi / f0_c)) * (1.07 ** _temperature_change)
-    f_bi = f0 * np.exp(-days / tau_bi)
-    f_bi[f_bi < _f_r_bi] = 0
-    t_r = np.where(f_bi == 0)[0][0]
-    f_bi = np.concatenate((np.zeros(_t0), f_bi))
-    return 1 - f_bi, f0, tau_bi, t_r
+    for state in ['TX', 'LA']:
+        f0_m = json.load(open(forcing_params_path, 'rb'))['params'][_state]['m']
+        f0_c = json.load(open(forcing_params_path, 'rb'))['params'][_state]['c']
+        f0 = f0_c + f0_m * _re
+        tau = -t_r / np.log(_f_r / f0)
+        f = f0 * np.exp(-days / tau)
+        t_r = int(np.ceil(t_r))
+        f[t_r + 1:] = 0
+        f = np.concatenate((np.zeros(_t0), f))
+        forcing_curves[state] = 1 - f
+        forcing_params[state]['f_0'] = f0
+        forcing_params[state]['tau'] = tau
+    forcing_params['all']['t_r'] = t_r
+    forcing_params['all']['f_r'] = _f_r
+    return forcing_curves, forcing_params
 
 
 if __name__ == "__main__":
@@ -104,23 +112,13 @@ if __name__ == "__main__":
     sector_list = list(baseline.sector)
     for dt in dt_axis:
         for re in re_axis:
-            f = {}
-            forcing_params = {}
-            for state in ['LA', 'TX']:
-                forcing_params[state] = {}
-                eora_state = 'US.' + state
-                X_baseline = baseline_production[:, eora_state].sum()
-                f[state], f0, tau, t_r = get_forcing_curve(_state=state,
-                                                           _t0=pars['impact_time'],
-                                                           _t_max=pars['sim_duration'],
-                                                           _radius_extension=re,
-                                                           _temperature_change=dt
-                                                           )
-                forcing_params[state]['f0'] = f0
-                forcing_params[state]['tau'] = tau
-                forcing_params[state]['tr'] = t_r
+            forcing_curves, forcing_params = get_forcing_curves(_t0=pars['impact_time'],
+                                                                _t_max=pars['sim_duration'],
+                                                                _re=re,
+                                                                _dT=dt
+                                                                )
             iter_name = 'HARVEY_dT{1:.2f}_re{2:.0f}'.format(pars['econ_baseyear'], dt, re)
-            write_ncdf_output(f, sector_list, ensemble_dir_path, iter_name)
+            write_ncdf_output(forcing_curves, sector_list, ensemble_dir_path, iter_name)
             iter_scenario = {'scenario': {}, 'iter_name': '', 'params': forcing_params}
             iter_scenario['scenario']['type'] = 'event_series'
             iter_scenario['scenario']['forcing'] = {}
