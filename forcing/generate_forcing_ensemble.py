@@ -58,8 +58,9 @@ def get_forcing_curve(_t0=0, _state='TX', _t_r_bi_initial=60, _f_r_bi=0.001, _t_
     tau_bi = (-_t_r_bi_initial / np.log(_f_r_bi / f0_c)) * (1.07 ** _temperature_change)
     f_bi = f0 * np.exp(-days / tau_bi)
     f_bi[f_bi < _f_r_bi] = 0
+    t_r = np.where(f_bi == 0)[0][0]
     f_bi = np.concatenate((np.zeros(_t0), f_bi))
-    return 1 - f_bi, f0, tau_bi
+    return 1 - f_bi, f0, tau_bi, t_r
 
 
 if __name__ == "__main__":
@@ -104,18 +105,23 @@ if __name__ == "__main__":
     for dt in dt_axis:
         for re in re_axis:
             f = {}
+            forcing_params = {}
             for state in ['LA', 'TX']:
+                forcing_params[state] = {}
                 eora_state = 'US.' + state
                 X_baseline = baseline_production[:, eora_state].sum()
-                f[state], f0, tau = get_forcing_curve(_state=state,
-                                                      _t0=pars['impact_time'],
-                                                      _t_max=pars['sim_duration'],
-                                                      _radius_extension=re,
-                                                      _temperature_change=dt
-                                                      )
+                f[state], f0, tau, t_r = get_forcing_curve(_state=state,
+                                                           _t0=pars['impact_time'],
+                                                           _t_max=pars['sim_duration'],
+                                                           _radius_extension=re,
+                                                           _temperature_change=dt
+                                                           )
+                forcing_params[state]['f0'] = f0
+                forcing_params[state]['tau'] = tau
+                forcing_params[state]['tr'] = t_r
             iter_name = 'HARVEY_dT{1:.2f}_re{2:.0f}'.format(pars['econ_baseyear'], dt, re)
             write_ncdf_output(f, sector_list, ensemble_dir_path, iter_name)
-            iter_scenario = {'scenario': {}, 'iter_name': '', 'params': {'f0': f0, 'tau': tau}}
+            iter_scenario = {'scenario': {}, 'iter_name': '', 'params': forcing_params}
             iter_scenario['scenario']['type'] = 'event_series'
             iter_scenario['scenario']['forcing'] = {}
             iter_scenario['scenario']['forcing']['variable'] = 'forcing'
