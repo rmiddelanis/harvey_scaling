@@ -48,11 +48,11 @@ def write_ncdf_output(_forcing_curves, _sector_list, _out_dir, _out_name, max_le
 
 # scale f0 with geographic extent
 # scale tau with precipitation
-def get_forcing_curves(_t0=0, _t_r_init=60, _f_r=0.001, _t_max=1000, _re=0, _dT=0):
+def get_forcing_curves(_t0=0, _cc_factor=1.07, _t_r_init=60, _f_r=0.001, _t_max=1000, _re=0, _dT=0):
     forcing_params_path = os.path.join(home_dir, "repos/harvey_scaling/data/generated/initial_forcing_params.json")
     forcing_curves = {}
     forcing_params = {}
-    t_r = _t_r_init * (1.07 ** _dT)
+    t_r = _t_r_init * (_cc_factor ** _dT)
     days = np.arange(_t_max - _t0)
     for state in ['TX', 'LA']:
         f0_m = json.load(open(forcing_params_path, 'rb'))['params'][state]['m']
@@ -78,26 +78,29 @@ if __name__ == "__main__":
                         help='')
     parser.add_argument('--impact_time', type=int, default=5, help='')
     parser.add_argument('--sim_duration', type=int, default=600, help='')
-    parser.add_argument('--min_dT', type=float, default=-0.5, help='')
+    parser.add_argument('--min_dT', type=float, default=0, help='')
     parser.add_argument('--max_dT', type=float, default=5.0, help='')
-    parser.add_argument('--min_re', type=float, default=-10e3, help='')
+    parser.add_argument('--min_re', type=float, default=0, help='')
     parser.add_argument('--max_re', type=float, default=100e3, help='')
     parser.add_argument('--dT_stepwidth', type=float, default=0.25, help='')
     parser.add_argument('--re_stepwidth', type=float, default=5e3, help='')
+    parser.add_argument('--cc_factor', type=float, default=1.07, help='')
     pars = vars(parser.parse_args())
 
     settings_tpl = yaml.load(
         open(os.path.join(home_dir, 'repos/harvey_scaling/forcing/settings_template.yml'),
              'rb'))
 
-    ensemble_dir_path = os.path.join(pars['ensemble_dir'],
-                                     'HARVEY_econYear{}_noSec_expRecovery'.format(pars['econ_baseyear']))
-    ensemble_dir_path = ensemble_dir_path + "_dT_{}_{}_{}__re{}_{}_{}".format(pars['min_dT'],
-                                                                              pars['max_dT'],
-                                                                              pars['dT_stepwidth'],
-                                                                              pars['min_re'],
-                                                                              pars['max_re'],
-                                                                              pars['re_stepwidth'])
+    ensemble_dir_path = os.path.join(pars['ensemble_dir'], 'HARVEY_econYear{}'.format(pars['econ_baseyear']))
+    ensemble_dir_path = ensemble_dir_path + "_dT_{}_{}_{}__re{}_{}_{}__ccFactor{}".format(
+        pars['min_dT'],
+        pars['max_dT'],
+        pars['dT_stepwidth'],
+        pars['min_re'],
+        pars['max_re'],
+        pars['re_stepwidth'],
+        pars['cc_factor']
+    )
     if not os.path.exists(ensemble_dir_path):
         os.makedirs(ensemble_dir_path)
     ensemble_meta = {'scaled_scenarios': {}, 'base_scenario': {}, 'max_scenario': {}}
@@ -111,6 +114,7 @@ if __name__ == "__main__":
     for dt in dt_axis:
         for re in re_axis:
             forcing_curves, forcing_params = get_forcing_curves(_t0=pars['impact_time'],
+                                                                _cc_factor=pars['cc_factor'],
                                                                 _t_max=pars['sim_duration'],
                                                                 _re=re,
                                                                 _dT=dt
