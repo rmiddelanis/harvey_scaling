@@ -63,8 +63,8 @@ def get_forcing_curves(_t0=0, _t_r_init=60, _f_r=0.001, _t_max=1000, _re=0, _dT=
         t_r = int(np.ceil(t_r))
         f[t_r + 1:] = 0
         f = np.concatenate((np.zeros(_t0), f))
-        forcing_curves[state] = 1 - f
-        forcing_params[state] = {'f_0': f0, 'tau': tau}
+        forcing_curves['US.' + state] = 1 - f
+        forcing_params['US.' + state] = {'f_0': f0, 'tau': tau}
     forcing_params['all'] = {'t_r': t_r, 'f_r': _f_r}
     return forcing_curves, forcing_params
 
