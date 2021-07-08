@@ -48,15 +48,15 @@ def write_ncdf_output(_forcing_curves, _sector_list, _out_dir, _out_name, max_le
 
 # scale f0 with geographic extent
 # scale tau with precipitation
-def get_forcing_curves(_t0=0, _state='TX', _t_r_init=60, _f_r=0.001, _t_max=1000, _re=0, _dT=0):
+def get_forcing_curves(_t0=0, _t_r_init=60, _f_r=0.001, _t_max=1000, _re=0, _dT=0):
     forcing_params_path = os.path.join(home_dir, "repos/harvey_scaling/data/generated/initial_forcing_params.json")
     forcing_curves = {}
     forcing_params = {}
     t_r = _t_r_init * (1.07 ** _dT)
     days = np.arange(_t_max - _t0)
     for state in ['TX', 'LA']:
-        f0_m = json.load(open(forcing_params_path, 'rb'))['params'][_state]['m']
-        f0_c = json.load(open(forcing_params_path, 'rb'))['params'][_state]['c']
+        f0_m = json.load(open(forcing_params_path, 'rb'))['params'][state]['m']
+        f0_c = json.load(open(forcing_params_path, 'rb'))['params'][state]['c']
         f0 = f0_c + f0_m * _re
         tau = -t_r / np.log(_f_r / f0)
         f = f0 * np.exp(-days / tau)
