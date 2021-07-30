@@ -130,7 +130,9 @@ if __name__ == "__main__":
             iter_settings['scenarios'][0] = iter_scenario['scenario']
             settings_tpl['run']['stop'] = pars['sim_duration']
             settings_tpl['outputs'][0]['total'] = pars['sim_duration']
-            settings_tpl['network']['file'] = '/p/projects/acclimate/data/eora/EORA{}_CHN_USA.nc'.format(
+            # settings_tpl['network']['file'] = '/p/projects/acclimate/data/eora/EORA{}_CHN_USA.nc'.format(
+            #     pars['econ_baseyear'])
+            settings_tpl['network']['file'] = '/home/robinmid/repos/harvey_scaling/disaggregation/output/Eora26-v199.82-{}_USA_CHN.nc'.format(
                 pars['econ_baseyear'])
             iter_scenario['iter_name'] = iter_name
             iter_scenario['sim_duration'] = pars['sim_duration']
