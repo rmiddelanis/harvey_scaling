@@ -6,7 +6,7 @@ qos='medium'
 cpus=4
 
 scenario_name=''
-workdir_root='/p/tmp/robinmid/acclimate_run/scaling_ensembles'
+workdir_root='/p/tmp/robinmid/acclimate_run/scaling_ensembles/harvey_paper'
 acclimate_path='/home/robinmid/repos/acclimate/acclimate/build/acclimate'
 ensembles_dir='/home/robinmid/repos/harvey_scaling/data/forcing/ensembles'
 
