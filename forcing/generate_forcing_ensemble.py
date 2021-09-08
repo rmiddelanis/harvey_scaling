@@ -3,6 +3,8 @@ from __future__ import division
 import itertools
 import warnings
 
+import tqdm
+
 warnings.filterwarnings('ignore')
 import os
 import argparse
@@ -139,7 +141,7 @@ if __name__ == "__main__":
     if not os.path.exists(ensemble_dir_path):
         os.makedirs(ensemble_dir_path)
     all_sectors = ['AGRI', 'FISH', 'MINQ', 'FOOD', 'TEXL', 'WOOD', 'OILC', 'METL', 'MACH', 'TREQ', 'MANU', 'RECY', 'ELWA', 'CONS', 'REPA', 'WHOT', 'RETT', 'GAST', 'TRAN', 'COMM', 'FINC', 'ADMI', 'EDHE', 'HOUS', 'OTHE', 'REXI', 'FCON']
-    for dt, re in dt_re_pairs:
+    for dt, re in tqdm.tqdm(dt_re_pairs):
         forcing_curves, forcing_params = get_forcing_curves(_t0=pars['impact_time'],
                                                             _cc_factor=pars['cc_factor'],
                                                             _t_max=pars['sim_duration'],
