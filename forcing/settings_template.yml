@@ -2,7 +2,7 @@ run:
   start: 0
   stop: +sim_time_placeholder+
 network:
-  file: /p/projects/acclimate/data/eora/EORA2012_CHN_USA.nc
+  file: /p/projects/acclimate/data/eora/Eora26-v199.82-2015-CHN-USA_naics_disagg.nc
   type: netcdf
   threshold: 1000
 transport:

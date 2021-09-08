@@ -2,7 +2,7 @@
 
 #set defaults
 
-qos='medium'
+qos='short'
 cpus=4
 
 scenario_name=''

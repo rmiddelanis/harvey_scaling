@@ -138,11 +138,7 @@ if __name__ == "__main__":
 
     if not os.path.exists(ensemble_dir_path):
         os.makedirs(ensemble_dir_path)
-    baseline = netcdf.load(
-        os.path.join(home_dir, 'repos/harvey_scaling/data/external/EORA_{}_baseline.nc'.format(pars['econ_baseyear'])))
-    baseline_production = baseline.agents.production[0, :, :]
-    baseline_production *= 1e3
-    sector_list = list(baseline.sector)
+    all_sectors = ['AGRI', 'FISH', 'MINQ', 'FOOD', 'TEXL', 'WOOD', 'OILC', 'METL', 'MACH', 'TREQ', 'MANU', 'RECY', 'ELWA', 'CONS', 'REPA', 'WHOT', 'RETT', 'GAST', 'TRAN', 'COMM', 'FINC', 'ADMI', 'EDHE', 'HOUS', 'OTHE', 'REXI', 'FCON']
     for dt, re in dt_re_pairs:
         forcing_curves, forcing_params = get_forcing_curves(_t0=pars['impact_time'],
                                                             _cc_factor=pars['cc_factor'],
@@ -151,7 +147,7 @@ if __name__ == "__main__":
                                                             _dT=dt
                                                             )
         iter_name = 'HARVEY_dT{1:.2f}_re{2:.0f}'.format(pars['econ_baseyear'], dt, re)
-        write_ncdf_output(forcing_curves, sector_list, ensemble_dir_path, iter_name)
+        write_ncdf_output(forcing_curves, all_sectors, ensemble_dir_path, iter_name)
         iter_scenario = {'scenario': {}, 'iter_name': '', 'params': forcing_params}
         iter_scenario['scenario']['type'] = 'event_series'
         iter_scenario['scenario']['forcing'] = {}
@@ -163,8 +159,8 @@ if __name__ == "__main__":
         settings_tpl['outputs'][0]['total'] = pars['sim_duration']
         # settings_tpl['network']['file'] = '/p/projects/acclimate/data/eora/EORA{}_CHN_USA.nc'.format(
         #     pars['econ_baseyear'])
-        settings_tpl['network']['file'] = '/home/robinmid/repos/harvey_scaling/disaggregation/output/Eora26-v199.82-{}_USA_CHN.nc'.format(
-            pars['econ_baseyear'])
+        # settings_tpl['network']['file'] = '/home/robinmid/repos/harvey_scaling/disaggregation/output/Eora26-v199.82-{}_USA_CHN.nc'.format(
+        #     pars['econ_baseyear'])
         iter_scenario['iter_name'] = iter_name
         iter_scenario['sim_duration'] = pars['sim_duration']
         ensemble_meta['scaled_scenarios'][(re, dt)] = iter_scenario
