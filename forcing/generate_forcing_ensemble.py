@@ -1,4 +1,6 @@
 from __future__ import division
+
+import itertools
 import warnings
 
 warnings.filterwarnings('ignore')
@@ -85,6 +87,11 @@ if __name__ == "__main__":
     parser.add_argument('--dT_stepwidth', type=float, default=0.125, help='')
     parser.add_argument('--re_stepwidth', type=float, default=5e3, help='')
     parser.add_argument('--cc_factor', type=float, default=1.07, help='')
+    parser.add_argument('--slopes', type=str, default='', help='') # in km/degC SST, not GMT!!
+    parser.add_argument('--binstep_re', type=int, default=1.5e3, help='')
+    parser.add_argument('--binstep_dT', type=int, default=0.0375, help='')
+    parser.add_argument('--binstep_nr', type=int, default=1, help='')
+
     pars = vars(parser.parse_args())
 
     settings_tpl = yaml.load(
@@ -92,52 +99,76 @@ if __name__ == "__main__":
              'rb'))
 
     ensemble_dir_path = os.path.join(pars['ensemble_dir'], 'HARVEY_econYear{}'.format(pars['econ_baseyear']))
-    ensemble_dir_path = ensemble_dir_path + "_dT_{}_{}_{}__re{}_{}_{}__ccFactor{}".format(
-        pars['min_dT'],
-        pars['max_dT'],
-        pars['dT_stepwidth'],
-        pars['min_re'],
-        pars['max_re'],
-        pars['re_stepwidth'],
-        pars['cc_factor']
-    )
+    ensemble_meta = {'scaled_scenarios': {}}
+
+    if pars['slopes'] == '':
+        ensemble_dir_path = ensemble_dir_path + "_dT_{}_{}_{}__re{}_{}_{}__ccFactor{}".format(
+            pars['min_dT'],
+            pars['max_dT'],
+            pars['dT_stepwidth'],
+            pars['min_re'],
+            pars['max_re'],
+            pars['re_stepwidth'],
+            pars['cc_factor']
+        )
+        dt_axis = np.arange(pars['min_dT'], pars['max_dT'] + pars['dT_stepwidth'], pars['dT_stepwidth'])
+        re_axis = np.arange(pars['min_re'], pars['max_re'] + pars['re_stepwidth'], pars['re_stepwidth'])
+        dt_re_pairs = itertools.product(dt_axis, re_axis)
+    else:
+        ensemble_dir_path = ensemble_dir_path + "_dT_{}_{}_{}__slopes_{}__ccFactor{}".format(
+            pars['min_dT'],
+            pars['max_dT'],
+            pars['dT_stepwidth'],
+            pars['slopes'],
+            pars['cc_factor']
+        )
+        ensemble_meta['slopes'] = {}
+        slopes = [int(i) for i in pars['slopes'].split('+')]
+        dt_re_pairs = []
+        for slope in slopes:
+            ensemble_meta['slopes'][slope] = {}
+            for dt in np.arange(pars['min_dT'], pars['max_dT'] + pars['dT_stepwidth'], pars['dT_stepwidth']):
+                re = slope * dt
+                ensemble_meta['slopes'][slope][(dt, re)] = []
+                for dt_ in np.arange(dt - pars['binstep_nr'] * pars['binstep_dT'], dt + pars['binstep_dT'] * (pars['binstep_nr'] + 0.5), pars['binstep_dT']):
+                    for re_ in np.arange(re - pars['binstep_nr'] * pars['binstep_re'], re + pars['binstep_re'] * (pars['binstep_nr'] + 0.5), pars['binstep_re']):
+                        dt_re_pairs.append((dt_, re_))
+                        ensemble_meta['slopes'][slope][(dt, re)].append((dt_, re_))
+        dt_re_pairs = list(set(dt_re_pairs))
+
     if not os.path.exists(ensemble_dir_path):
         os.makedirs(ensemble_dir_path)
-    ensemble_meta = {'scaled_scenarios': {}, 'base_scenario': {}, 'max_scenario': {}}
-    dt_axis = np.arange(pars['min_dT'], pars['max_dT'] + pars['dT_stepwidth'], pars['dT_stepwidth'])
-    re_axis = np.arange(pars['min_re'], pars['max_re'] + pars['re_stepwidth'], pars['re_stepwidth'])
     baseline = netcdf.load(
         os.path.join(home_dir, 'repos/harvey_scaling/data/external/EORA_{}_baseline.nc'.format(pars['econ_baseyear'])))
     baseline_production = baseline.agents.production[0, :, :]
     baseline_production *= 1e3
     sector_list = list(baseline.sector)
-    for dt in dt_axis:
-        for re in re_axis:
-            forcing_curves, forcing_params = get_forcing_curves(_t0=pars['impact_time'],
-                                                                _cc_factor=pars['cc_factor'],
-                                                                _t_max=pars['sim_duration'],
-                                                                _re=re,
-                                                                _dT=dt
-                                                                )
-            iter_name = 'HARVEY_dT{1:.2f}_re{2:.0f}'.format(pars['econ_baseyear'], dt, re)
-            write_ncdf_output(forcing_curves, sector_list, ensemble_dir_path, iter_name)
-            iter_scenario = {'scenario': {}, 'iter_name': '', 'params': forcing_params}
-            iter_scenario['scenario']['type'] = 'event_series'
-            iter_scenario['scenario']['forcing'] = {}
-            iter_scenario['scenario']['forcing']['variable'] = 'forcing'
-            iter_scenario['scenario']['forcing']['file'] = os.path.join(ensemble_dir_path, iter_name + '.nc')
-            iter_settings = settings_tpl
-            iter_settings['scenarios'][0] = iter_scenario['scenario']
-            settings_tpl['run']['stop'] = pars['sim_duration']
-            settings_tpl['outputs'][0]['total'] = pars['sim_duration']
-            # settings_tpl['network']['file'] = '/p/projects/acclimate/data/eora/EORA{}_CHN_USA.nc'.format(
-            #     pars['econ_baseyear'])
-            settings_tpl['network']['file'] = '/home/robinmid/repos/harvey_scaling/disaggregation/output/Eora26-v199.82-{}_USA_CHN.nc'.format(
-                pars['econ_baseyear'])
-            iter_scenario['iter_name'] = iter_name
-            iter_scenario['sim_duration'] = pars['sim_duration']
-            ensemble_meta['scaled_scenarios'][(re, dt)] = iter_scenario
-            yaml.dump(settings_tpl,
-                      open(os.path.join(ensemble_dir_path, 'settings_{}.yml'.format(iter_name)), 'w'))
+    for dt, re in dt_re_pairs:
+        forcing_curves, forcing_params = get_forcing_curves(_t0=pars['impact_time'],
+                                                            _cc_factor=pars['cc_factor'],
+                                                            _t_max=pars['sim_duration'],
+                                                            _re=re,
+                                                            _dT=dt
+                                                            )
+        iter_name = 'HARVEY_dT{1:.2f}_re{2:.0f}'.format(pars['econ_baseyear'], dt, re)
+        write_ncdf_output(forcing_curves, sector_list, ensemble_dir_path, iter_name)
+        iter_scenario = {'scenario': {}, 'iter_name': '', 'params': forcing_params}
+        iter_scenario['scenario']['type'] = 'event_series'
+        iter_scenario['scenario']['forcing'] = {}
+        iter_scenario['scenario']['forcing']['variable'] = 'forcing'
+        iter_scenario['scenario']['forcing']['file'] = os.path.join(ensemble_dir_path, iter_name + '.nc')
+        iter_settings = settings_tpl
+        iter_settings['scenarios'][0] = iter_scenario['scenario']
+        settings_tpl['run']['stop'] = pars['sim_duration']
+        settings_tpl['outputs'][0]['total'] = pars['sim_duration']
+        # settings_tpl['network']['file'] = '/p/projects/acclimate/data/eora/EORA{}_CHN_USA.nc'.format(
+        #     pars['econ_baseyear'])
+        settings_tpl['network']['file'] = '/home/robinmid/repos/harvey_scaling/disaggregation/output/Eora26-v199.82-{}_USA_CHN.nc'.format(
+            pars['econ_baseyear'])
+        iter_scenario['iter_name'] = iter_name
+        iter_scenario['sim_duration'] = pars['sim_duration']
+        ensemble_meta['scaled_scenarios'][(re, dt)] = iter_scenario
+        yaml.dump(settings_tpl,
+                  open(os.path.join(ensemble_dir_path, 'settings_{}.yml'.format(iter_name)), 'w'))
     with open(os.path.join(ensemble_dir_path, "ensemble_meta.pk"), 'wb') as meta_file:
         pickle.dump(ensemble_meta, meta_file)
