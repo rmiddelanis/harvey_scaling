@@ -14,13 +14,19 @@ import netcdf
 import datetime as dt
 import pandas as pd
 import matplotlib.pyplot as plt
+import us
 
 WORLD_REGIONS = netcdf.world_regions
-WORLD_REGIONS['NMA'] = WORLD_REGIONS.pop('NAM')
-WORLD_REGIONS['WORLD'] = list(set([ctry for wr in netcdf.world_regions.values() for ctry in wr]))
-WORLD_REGIONS['ROW'] = list(set(WORLD_REGIONS['WORLD']) - {'USA'} - set(WORLD_REGIONS['USA']))
-WORLD_REGIONS['USA_REST_SANDY'] = list(set(WORLD_REGIONS['USA']) - {'USA', 'US.NJ', 'US.NY'})
-WORLD_REGIONS['USA_REST_HARVEY'] = list(set(WORLD_REGIONS['USA']) - {'USA', 'US.TX'})
+if 'NAM' in WORLD_REGIONS:
+    WORLD_REGIONS['NMA'] = WORLD_REGIONS.pop('NAM')
+if 'WORLD' not in WORLD_REGIONS:
+    WORLD_REGIONS['WORLD'] = list(set([ctry for wr in netcdf.world_regions.values() for ctry in wr]))
+if 'ROW' not in WORLD_REGIONS:
+    WORLD_REGIONS['ROW'] = list(set(WORLD_REGIONS['WORLD']) - {'USA'} - set(WORLD_REGIONS['USA']))
+if 'USA_REST_SANDY' not in WORLD_REGIONS:
+    WORLD_REGIONS['USA_REST_SANDY'] = list(set(WORLD_REGIONS['USA']) - {'USA', 'US.NJ', 'US.NY'})
+if 'USA_REST_HARVEY' not in WORLD_REGIONS:
+    WORLD_REGIONS['USA_REST_HARVEY'] = list(set(WORLD_REGIONS['USA']) - {'USA', 'US.TX'})
 
 SECTOR_GROUPS = {
     'ALLSECTORS': [
@@ -82,7 +88,7 @@ SECTOR_GROUPS = {
     ]
 }
 
-state_gdp_path = "~/repos/hurricanes_hindcasting_remake/forcing_gen/data/gdp_by_state_1997_to_2018.csv"
+state_gdp_path = "~/repos/harvey_scaling/data/external/CAGDP2__ALL_AREAS_2001_2019.csv"
 
 
 def find_attribute_in_yaml(_yaml_root, _attribute_name):
@@ -493,33 +499,69 @@ def find_peaks_in_ts(_ts: np.ndarray, _from=None, _to=None, _order='index', **pe
     return max_peaks, max_peak_props, min_peaks, min_peak_props
 
 
-def calc_average_initial_forcing_intensity(_data, _year, _inplace=False):
+def calc_mean_f0(_data, _year, _states, _inplace=False):
     if _data.scaled_scenarios is None:
         raise ValueError('data must contain scaled scenarios meta information.')
-
     if _inplace:
         res = _data
     else:
         res = copy.deepcopy(_data)
-
+    us_states_mapping = us.states.mapping('name', 'abbr')
     gdp_by_state = pd.read_csv(state_gdp_path)
-    gdp_by_state = gdp_by_state[gdp_by_state['Sector'] == 'TOT']
-    gdp_by_state.set_index('State', inplace=True)
-    gdp_by_state = gdp_by_state[str(_year)]
-
-    affected_states = list(_data.scaled_scenarios[(_data.get_lambda_axis()[-1]), _data.get_duration_axis()[-1]]
-                           ['params']['forcing'].keys())
-
-    gdp_at_risk = sum([gdp_by_state.loc[state] for state in affected_states])
-
-    for (scaled_l,scaled_d) in list(itertools.product(_data.get_lambda_axis(), _data.get_duration_axis())):
+    gdp_by_state.drop(gdp_by_state.index[-4:], inplace=True)
+    gdp_by_state = gdp_by_state[gdp_by_state['Description'] == 'All industry total']
+    gdp_by_state = gdp_by_state[gdp_by_state['GeoName'].isin(us_states_mapping.keys())]
+    gdp_by_state['GeoName'] = gdp_by_state['GeoName'].apply(lambda x: 'US.' + us_states_mapping[x])
+    gdp_by_state = gdp_by_state[gdp_by_state['GeoName'].isin(_states)]
+    gdp_by_state = gdp_by_state[['GeoName', str(_year)]].astype({'GeoName': str, str(_year): int})
+    gdp_by_state.set_index('GeoName', inplace=True)
+    total_gdp = gdp_by_state[str(_year)].sum()
+    for (scaled_l, scaled_d) in list(itertools.product(_data.get_lambda_axis(), _data.get_duration_axis())):
         exposed_gdp_scaled = 0
-        for state in _data.base_forcing.keys():
-            state_dmg_share = _data.scaled_scenarios[(scaled_l, scaled_d)]['params']['forcing'][state]['intensity']
-            exposed_gdp_scaled += gdp_by_state[state] * state_dmg_share
-        mean_f0 = exposed_gdp_scaled / gdp_at_risk
-        res.scaled_scenarios[(scaled_l, scaled_d)]['params']['mean_initial_forcing_intensity'] = mean_f0
+        for state in _states:
+            state_f0 = _data.scaled_scenarios[(scaled_l, scaled_d)]['params'][state]['f_0']
+            exposed_gdp_scaled += gdp_by_state.loc[state, str(_year)] * state_f0
+        mean_f0 = exposed_gdp_scaled / total_gdp
+        res.scaled_scenarios[(scaled_l, scaled_d)]['params']['all']['f_0'] = mean_f0
+    if not _inplace:
+        return res
 
+def set_direct_loss_meta(_data, _inplace=False):
+    if _data.scaled_scenarios is None:
+        raise ValueError('data must contain scaled scenarios meta information.')
+    if 'direct_loss' not in _data.get_vars():
+        raise ValueError('data must contain variable direct_loss')
+    if _inplace:
+        res = _data
+    else:
+        res = copy.deepcopy(_data)
+    print("Direct loss will be calculated for {} sectors and {} regions".format(len(_data.get_vars()),
+                                                                                len(_data.get_regions())))
+    direct_loss = _data.get_vars('direct_loss').aggregate('sum')
+    for (scaled_l, scaled_d) in list(itertools.product(_data.get_lambda_axis(), _data.get_duration_axis())):
+        direct_loss_iter = direct_loss.get_lambdavals(scaled_l).get_durationvals(scaled_d).get_data().sum()
+        res.scaled_scenarios[(scaled_l, scaled_d)]['params']['all']['direct_loss'] = direct_loss_iter
+    if not _inplace:
+        return res
+
+
+def calc_direct_production_loss(_data, _inplace=False):
+    if _inplace:
+        res = _data
+    else:
+        res = copy.deepcopy(_data)
+    days = np.arange(_data.get_sim_duration())
+    for scenario_key, scenario in _data.scaled_scenarios.items():
+        t_r = scenario['params']['all']['t_r']
+        f_r = scenario['params']['all']['f_r']
+        total_direct_loss = 0
+        affected_states = list(scenario['params'].keys())[:-1]
+        for state in affected_states:
+            f0 = scenario['params'][state]['f_0']
+            tau = scenario['params'][state]['tau']
+            f = f0 * np.exp(-days / tau)
+            f[t_r + 1:] = 0
+            direct_loss = f * _data.get_vars('production').get_regions(affected_states)
     if not _inplace:
         return res
 
