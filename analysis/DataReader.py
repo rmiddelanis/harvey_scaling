@@ -64,6 +64,9 @@ class DataReader:
     def read_file(self, lambda_value_, duration_value_):
         l_ = np.where(self.lambda_axis == lambda_value_)[0]
         d_ = np.where(self.duration_axis == duration_value_)[0]
+        if (lambda_value_, duration_value_) not in ensemble_meta['scaled_scenarios'].keys():
+            print("##### Key ({}, {}) not found. Skipping.".format(lambda_value_, duration_value_))
+            return
         iteration_path = os.path.join(self.experiment_series_dir,
                                       self.ensemble_meta['scaled_scenarios'][(lambda_value_, duration_value_)][
                                           'iter_name'] + "/output.nc")
