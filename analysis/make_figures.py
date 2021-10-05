@@ -11,7 +11,8 @@ import os
 import sys
 
 import tqdm
-from matplotlib import transforms, ticker
+from matplotlib import transforms, ticker, patches
+from matplotlib import cm
 
 sys.path.append("../")
 
@@ -22,7 +23,7 @@ from netCDF4 import Dataset
 from analysis.map import make_map, create_colormap
 
 from data.calc_initial_forcing_intensity_HARVEY import plot_polygon, load_hwm, alpha_shape, alpha
-from analysis.dataformat import AggrData
+from analysis.dataformat import AggrData, clean_regions
 from analysis.utils import WORLD_REGIONS
 from scipy.interpolate import interp1d, RectBivariateSpline
 import matplotlib as mpl
@@ -49,6 +50,8 @@ plt.rc('legend', fontsize=FSIZE_SMALL)  # legend fontsize
 plt.rc('figure', titlesize=FSIZE_LARGE)  # fontsize of the figure title
 plt.rc('axes', linewidth=0.5)  # fontsize of the figure title
 
+SLOPE_COLORS = plt.cm.get_cmap('Set2')
+
 
 def plot_initial_claims(_plot_from='07-01-2017', _plot_to='01-01-2018', _shade_from='2017-08-26',
                         _shade_to='2017-10-28', _outfile=None):
@@ -64,7 +67,7 @@ def plot_initial_claims(_plot_from='07-01-2017', _plot_to='01-01-2018', _shade_f
     shade_y1 = shade_data.TXICLAIMS.values
     shade_y2 = max(data[data.DATE == _shade_from].TXICLAIMS.iloc[0], data[data.DATE == _shade_to].TXICLAIMS.iloc[0])
     plt.fill_between(shade_x, shade_y1, shade_y2, alpha=0.3, label='estimated Harvey\neffect')
-    plt.legend()  # (loc='upper right')
+    plt.legend(frameon=False)  # (loc='upper right')
     plt.tight_layout()
     if _outfile is not None:
         plt.savefig(_outfile, dpi=300)
@@ -180,6 +183,7 @@ def plot_radius_extension_impact(_outfile=None):
     for _s in ['LA', 'TX']:
         m_f0_i = initial_forcing_intensities['params'][_s]['m']
         c_f0_i = initial_forcing_intensities['params'][_s]['c']
+        print(m_f0_i, c_f0_i)
         ax.plot([re[0], re[-1]], [m_f0_i * re[0] + c_f0_i, m_f0_i * re[-1] + c_f0_i], '--k')
         if _s == 'LA':
             y_pos = 0
@@ -187,7 +191,7 @@ def plot_radius_extension_impact(_outfile=None):
         elif _s == 'TX':
             y_pos = 0.75
             va = 'top'
-        ax.text(1, y_pos, "y={0:1.3e}x+{1:1.4f}".format(m_f0_i * 1e3, c_f0_i), ha='right', va=va,
+        ax.text(1, y_pos, "y={0:1.2f}".format(m_f0_i * 1e6) + r"$\cdot 10^{-3}$" + "x+{0:1.2f}".format(c_f0_i), ha='right', va=va,
                 transform=ax.transAxes)
         # ax1.scatter(x, [initial_forcing_intensities['points'][re][_s] for re in radius_extensions], label=_s, s=6)
         ax.plot(re, [initial_forcing_intensities['points'][str(re)][_s] for re in re], label=_s)
@@ -207,44 +211,52 @@ def plot_radius_extension_impact(_outfile=None):
 
 
 def prepare_heatmap_figure(_data: AggrData, _type: str, _x_ax: bool, _scale_factor=1.0, gmt_anomaly_0=0,
-                           _sst_gmt_factor=1.0, _numbering=None):
+                           _sst_gmt_factor=0.5, _numbering=None, _y_ax_precision=3):
     # fig_width = MAX_FIG_WIDTH_WIDE * 0.8 * _scale_factor
     fig_width = MAX_FIG_WIDTH_NARROW * _scale_factor
     if _x_ax:
         # fig_height = MAX_FIG_WIDTH_WIDE * _scale_factor * 0.5
-        fig_height = MAX_FIG_WIDTH_NARROW * _scale_factor * 0.5 / 0.8
-        ax_bbox_y1 = 0.25 / _scale_factor
+        fig_height = MAX_FIG_WIDTH_NARROW * _scale_factor * 0.5 / 0.6
+        ax_bbox_y1 = 0.17 / _scale_factor
     else:
         # fig_height = MAX_FIG_WIDTH_WIDE * _scale_factor * 0.45
-        fig_height = MAX_FIG_WIDTH_NARROW * _scale_factor * 0.45 / 0.8
+        fig_height = MAX_FIG_WIDTH_NARROW * _scale_factor * 0.45 / 0.6
         ax_bbox_y1 = 0.05 / _scale_factor
-    ax_bbox_x1 = 0.21 / _scale_factor
-    ax_bbox_x2 = 1 - 0.25 / _scale_factor
-    ax_width = ax_bbox_x2 - ax_bbox_x1
-    dist_ax_cbar = 0.02
+    cbar_bbox_x1 = 0.21 / _scale_factor
     cbar_width = 0.02
-    cbar_bbox_x1 = ax_bbox_x1 + ax_width + dist_ax_cbar
+    dist_ax_cbar = 0.02
+    ax_bbox_x1 = cbar_bbox_x1 + cbar_width + dist_ax_cbar
+    ax_bbox_x2 = 1 - 0.12 / _scale_factor
+    ax_width = ax_bbox_x2 - ax_bbox_x1
     ax_height = 0.99 - ax_bbox_y1
     ax_bbox = (ax_bbox_x1, ax_bbox_y1, ax_width, ax_height)
     cbar_bbox = (cbar_bbox_x1, ax_bbox_y1, cbar_width, ax_height)
     print(ax_bbox, "\n", cbar_bbox)
     fig = plt.figure(figsize=(fig_width, fig_height))
     ax, cbar_ax = fig.add_axes(ax_bbox), fig.add_axes(cbar_bbox)
+    # ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%1.0f'))
+    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.{}f'.format(_y_ax_precision)))
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(8))
     if _type == 'heatmap_cut':
         cbar_ax.remove()
+        ax.xaxis.set_ticks_position('none')
     if _type == 'heatmap':
-        ax.tick_params(axis='y', labelrotation=0)
+        ax1 = ax.twinx()
+        ax1.tick_params(axis='y', labelrotation=0)
+        ax1.set_ylim(-0.5, len(_data.get_lambda_axis()) - 0.5)
+        ax1.set_yticks(np.arange(0, len(_data.get_lambda_axis()), 1))
+        ax1.set_yticklabels([int(l) for l in _data.get_lambda_axis() / 1e3])
         ax.set_ylim(-0.5, len(_data.get_lambda_axis()) - 0.5)
-        ax.set_yticks(np.arange(0, len(_data.get_lambda_axis()), 1))
-        ax.set_yticklabels([int(l) for l in _data.get_lambda_axis() / 1e3])
-        ax.set_ylabel('radius change (km)')
+        ax.set_yticks([])
+        ax.set_yticklabels([])
     if _x_ax:
         ax.set_xlim(-0.5, len(_data.get_duration_axis()) - 0.5)
         ax.set_xlim(-0.5, len(_data.get_duration_axis()) - 0.5)
-        ax.set_xticks(np.arange(0, len(_data.get_duration_axis()), 1))
-        ax.set_xticklabels(["{0:1.2f}".format(gmt_anomaly_0 + d / _sst_gmt_factor) for d in _data.get_duration_axis()])
-        ax.tick_params(axis='x', labelrotation=90)
-        ax.set_xlabel('global mean temperature anomaly $(\degree C)$')
+        ax.set_xticks(np.arange(0, len(_data.get_duration_axis()), 1 / _data.dT_stepwidth * _sst_gmt_factor))
+        # ax.set_xticklabels(["{0:1.2f}".format(gmt_anomaly_0 + d / _sst_gmt_factor) for d in _data.get_duration_axis()])
+        ax.set_xticklabels(np.arange(0, (len(_data.get_duration_axis()) - 1) * _data.dT_stepwidth / _sst_gmt_factor + 1e-10).astype(int))
+        # ax.tick_params(axis='x', labelrotation=90)
+        ax.set_xlabel(r'$\Delta GMT$ (difference to $GMT_{2017}$ in °C)')
     else:
         ax.set_xlabel('')
         ax.set_xticklabels([])
@@ -255,17 +267,20 @@ def prepare_heatmap_figure(_data: AggrData, _type: str, _x_ax: bool, _scale_fact
     return fig, ax, cbar_ax
 
 
-def make_heatmap(_data: AggrData, _agg_method: str, base_point=None, contour_distance=None, _gauss_filter=True,
-                 _gauss_sigma=1, _gauss_truncate=1, _outfile=None, _slopes=None, _plot_cuts=False, _label=None,
-                 _sst_gmt_factor=1.0, _data_division=1.0, _numbering=None, _vmin=None, _vmax=None, **kwargs):
-    if _data.shape[0] != 1 or _data.shape[1] != 1 or _data.shape[2] != 1:
-        raise ValueError("All dimensions of the dataset except lambda and duration and time must be 1.")
+def make_heatmap(_data: AggrData, _agg_method: str, base_point=None, contour_distance=None, _gauss_filter=False,
+                 _gauss_sigma=1, _gauss_truncate=1, _outfile=None, _slopes=None, _plot_cuts=True, _label=None,
+                 _sst_gmt_factor=0.5, _data_division=1.0, _numbering=None, _vmin=None, _vmax=None, _slope_data=None,
+                 _inplot_info=True, _y_ax_precision=3, **kwargs):
+    if _data.shape[:3] != (1, 1, 1) or _data.shape[-1] != 1 or (
+            _slope_data is not None and (_slope_data.shape[:3] != (1, 1, 1) or _slope_data.shape[-1] != 1)):
+        raise ValueError("All dimensions of the datasets except lambda and duration.")
     numbering_heatmap = None
     numbering_cut = None
     if _numbering is not None:
         numbering_heatmap, numbering_cut = _numbering[0], _numbering[1]
     fig, ax, cbar_ax = prepare_heatmap_figure(_data, _type='heatmap', _x_ax=(not _plot_cuts),
-                                              _sst_gmt_factor=_sst_gmt_factor, _numbering=numbering_heatmap)
+                                              _sst_gmt_factor=_sst_gmt_factor, _numbering=numbering_heatmap,
+                                              _y_ax_precision=_y_ax_precision)
     _data_aggregated = copy.deepcopy(_data.clip(1))
     if _agg_method == 'sum':
         _data_aggregated.data_capsule.data = _data.get_data().sum(axis=-1, keepdims=True)
@@ -273,16 +288,25 @@ def make_heatmap(_data: AggrData, _agg_method: str, base_point=None, contour_dis
         _data_aggregated.data_capsule.data = _data.get_data().min(axis=-1, keepdims=True)
     elif _agg_method == 'max':
         _data_aggregated.data_capsule.data = _data.get_data().max(axis=-1, keepdims=True)
-    data_array = _data_aggregated.get_data().reshape((len(_data.get_lambda_axis()), len(_data.get_duration_axis())))
+    data_array = _data.data.reshape((len(_data.get_lambda_axis()), len(_data.get_duration_axis())))
     data_array /= _data_division
     data_filtered = gaussian_filter(data_array, sigma=_gauss_sigma, mode='nearest', truncate=_gauss_truncate)
     if _gauss_filter:
         plot_data = data_filtered
     else:
         plot_data = data_array
-    im = ax.imshow(plot_data, origin='lower', aspect='auto', vmin=_vmin, vmax=_vmax)
+    if _slope_data is not None and _vmin is None:
+        _vmin = min(_data.data.min(), _slope_data.data.min())
+    if _slope_data is not None and _vmax is None:
+        _vmax = max(_data.data.max(), _slope_data.data.max())
+    norm = mpl.colors.Normalize(vmin=_vmin, vmax=_vmax)
+    # cmap = cm.get_cmap('viridis')
+    cmap = cm.get_cmap('Oranges_r')
+    im = ax.imshow(plot_data, origin='lower', aspect='auto', norm=norm, cmap=cmap)
     cbar = fig.colorbar(im, cax=cbar_ax, orientation='vertical')
-    cbar.set_label(_label)
+    cbar_ax.yaxis.set_ticks_position('left')
+    cbar_ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.{}f'.format(_y_ax_precision)))
+    cbar_ax.yaxis.set_major_locator(ticker.MaxNLocator(8))
     if contour_distance is not None:
         contour_data = zoom(data_filtered, 3)
         vmax = data_array.max()
@@ -297,8 +321,10 @@ def make_heatmap(_data: AggrData, _agg_method: str, base_point=None, contour_dis
     base_x = np.where(_data_aggregated.get_duration_axis() == duration_0)[0][0]
     base_y = np.where(_data_aggregated.get_lambda_axis() == lambda_0)[0][0]
     base_z = _data_aggregated.get_durationvals(duration_0).get_lambdavals(lambda_0).get_data().flatten()[0]
+    if _slopes is None and _slope_data is not None:
+        _slopes = [s * _sst_gmt_factor for s in _slope_data.slope_meta.keys()]
     if _slopes is not None:
-        _slopes = sorted(_slopes, reverse=True)
+        _slopes = sorted(_slopes, reverse=False)
         d_i = (_data_aggregated.get_lambda_axis()[-1] - _data_aggregated.get_lambda_axis()[0]) / (len(
             _data_aggregated.get_lambda_axis()) - 1)
         d_d = (_data_aggregated.get_duration_axis()[-1] - _data_aggregated.get_duration_axis()[0]) / (len(
@@ -313,58 +339,141 @@ def make_heatmap(_data: AggrData, _agg_method: str, base_point=None, contour_dis
             ax.plot([base_x, x_max], [m * base_x + b, y_max], c='w')
             ax.text(base_x + (x_max - base_x) / 2, m * (base_x + (x_max - base_x) / 2) + b, string.ascii_uppercase[idx],
                     c='w', va='bottom', ha='right')
-    ax.plot(base_x, base_y, marker='x', markersize=8, color='w')
+    # ax.plot(base_x, base_y, marker='x', markersize=8, color='w')
     # ax.text(base_x, base_y, '\n({0:1.3f})'.format(base_z), color='k', fontsize=FSIZE_SMALL, ha='center', va='top')
+    if _slope_data is not None:
+        binstep_re = abs(_slope_data.get_lambdavals()[1] - _slope_data.get_lambdavals()[0])
+        binstep_dT = abs(_slope_data.get_durationvals()[1] - _slope_data.get_durationvals()[0])
+        datastep_re = abs(_data.get_lambdavals()[1] - _data.get_lambdavals()[0])
+        datastep_dT = abs(_data.get_durationvals()[1] - _data.get_durationvals()[0])
+        rectangle_width = binstep_dT / datastep_dT
+        rectangle_height = binstep_re / datastep_re
+        binsize = len(list(list(_slope_data.slope_meta.values())[0].values())[0])
+        binwidth = np.sqrt(binsize) * rectangle_width
+        binheight = np.sqrt(binsize) * rectangle_height
+        subpoint_coords = []
+        point_coords = []
+        for slope, points in _slope_data.slope_meta.items():
+            for point, subpoints in points.items():
+                point_coords.append(point)
+                subpoint_coords = subpoint_coords + subpoints
+        subpoint_coords = list(set(subpoint_coords))
+        for (d, l) in subpoint_coords:
+            x = d / datastep_dT
+            y = l / datastep_re
+            z = _slope_data.get_durationvals(d).get_lambdavals(l).data.flatten()[0]
+            rect = patches.Rectangle((x - rectangle_height / 2, y - rectangle_height / 2), rectangle_width,
+                                     rectangle_height,
+                                     edgecolor=None,
+                                     linewidth=0,
+                                     facecolor=cmap(norm(z)),
+                                     zorder=3,
+                                     )
+            ax.add_patch(rect)
+        for (d, l) in point_coords:
+            x = d / datastep_dT
+            y = l / datastep_re
+            rect = patches.Rectangle((x - binwidth / 2, y - binheight / 2), binwidth, binheight,
+                                     edgecolor='w',
+                                     linewidth=1,
+                                     facecolor='none',
+                                     zorder=4,
+                                     )
+            ax.add_patch(rect)
+    trans = transforms.blended_transform_factory(fig.transFigure, ax.transAxes)
+    for line_idx, line in enumerate(_label.split('\n')):
+        fig.text(0 + 0.04 * line_idx, 0.5, line, rotation=90, ha='left', va='center', transform=trans)
+    fig.text(1, 0.5, 'radius change (km)', rotation=90, ha='right', va='center', transform=trans)
+    if _inplot_info:
+        sector_name = list(_data.get_sectors().keys())[0]
+        if sector_name == 'PRIVSECTORS-MINQ':
+            sector_name = 'OTHE'
+        ax.text(0.02, 0.98, sector_name, transform=ax.transAxes, ha='left', va='top')
     if _plot_cuts:
         make_heatmap_cut(_data_aggregated, _agg_method, _slopes, _gauss_filter=_gauss_filter, _gauss_sigma=_gauss_sigma,
                          _plot_xax=True, _gauss_truncate=_gauss_truncate, _label=_label, _duration_0=duration_0,
-                         _sst_gmt_factor=_sst_gmt_factor, _numbering=numbering_cut, **kwargs)
-    plt.tight_layout()
-    if _outfile is not None:
-        fig.savefig(_outfile, dpi=300)
-    plt.show()
+                         _sst_gmt_factor=_sst_gmt_factor, _numbering=numbering_cut, _slope_data=_slope_data,
+                         _y_ax_precision=_y_ax_precision, **kwargs)
+    # plt.tight_layout()
+    # if _outfile is not None:
+    #     fig.savefig(_outfile, dpi=300)
+    plt.show(block=False)
+    return fig, ax, cbar_ax, norm
 
 
-def make_heatmap_cut(_data: AggrData, _agg_method: str, _slopes, _outfile=None, _gauss_filter=True, _gauss_sigma=1,
-                     _gauss_truncate=1, _plot_xax=True, _show_baseline=False, _label=None, _sst_gmt_factor=1.0,
-                     _duration_0=0, _numbering=None):
-    if _data.shape[0] != 1 or _data.shape[1] != 1 or _data.shape[2] != 1:
-        raise ValueError("All dimensions of the dataset except lambda and duration and time must be 1.")
+def make_heatmap_cut(_data: AggrData, _slopes=None, _outfile=None, _gauss_filter=True, _gauss_sigma=1,
+                     _gauss_truncate=1, _plot_xax=True, _label=None, _sst_gmt_factor=0.5,
+                     _duration_0=0, _numbering=None, _slope_data=None, _y_ax_precision=3):
+    if _data.shape[:3] != (1, 1, 1) or _data.shape[-1] != 1 or (
+            _slope_data is not None and (_slope_data.shape[:3] != (1, 1, 1) or _slope_data.shape[-1] != 1)):
+        raise ValueError("All dimensions of the datasets except lambda and duration.")
+    if _slopes is None and _slope_data is None:
+        raise ValueError("Must pass either slope array or slope data")
     fig, ax, _ = prepare_heatmap_figure(_data, _type='heatmap_cut', _x_ax=_plot_xax, _sst_gmt_factor=_sst_gmt_factor,
-                                        _numbering=_numbering)
-    if _agg_method == 'sum':
-        data_array = _data.get_data().sum(axis=-1, keepdims=True)
-    elif _agg_method == 'min':
-        data_array = _data.get_data().min(axis=-1, keepdims=True)
-    elif _agg_method == 'max':
-        data_array = _data.get_data().max(axis=-1, keepdims=True)
-    data_array = data_array.reshape((len(_data.get_lambda_axis()), len(_data.get_duration_axis())))
+                                        _numbering=_numbering, _y_ax_precision=_y_ax_precision)
+    data_array = _data.data.reshape((len(_data.get_lambda_axis()), len(_data.get_duration_axis())))
+    if _slopes is None and _slope_data is not None:
+        _slopes = [s * _sst_gmt_factor for s in _slope_data.slope_meta.keys()]
     if _gauss_filter:
         data_array = gaussian_filter(data_array, sigma=_gauss_sigma, mode='nearest', truncate=_gauss_truncate)
     interp = RectBivariateSpline(_data.get_lambda_axis(), _data.get_duration_axis(), data_array, s=0)
-    for idx, slope in enumerate(_slopes):
-        durations = _data.get_duration_axis()[_data.get_duration_axis() >= _duration_0]
-        x_offset = len(_data.get_duration_axis()[_data.get_duration_axis() < _duration_0])
-        lambdas = durations * slope / _sst_gmt_factor  # slopes are in km/degC GMT change. Therefore, translate into km/degC SST change:
-        lambdas = lambdas[lambdas <= _data.get_lambda_axis()[-1]]
-        durations = durations[:len(lambdas)]
-        z = [interp(lambdas[i], durations[i])[0, 0] for i in range(len(durations))]
-        ax.plot(np.arange(len(durations)) + x_offset, z,
-                label=string.ascii_uppercase[idx])
-        # label=string.ascii_uppercase[idx] + ": {0:1.0f} km / $\degree C$".format(_slopes[idx] / 1e3))
-    if _show_baseline:
-        if (_data.get_data()[..., 0].flatten() != _data.get_data()[..., 0].flatten()[0]).sum() == 0:
-            if _agg_method == 'sum':
-                factor = _data.get_sim_duration()
-            elif _agg_method in ['min', 'max']:
-                factor = 1
-            if _show_baseline:
-                ax.axhline(y=_data.get_data()[..., 0].flatten()[0] * factor, linestyle='--', label='baseline')
-        else:
-            print('Warning. Ambiguous baseline values. Baseline not shown')
-    ax.set_ylabel(_label)
-    ax.legend()
+    if _slope_data is None:
+        for idx, slope in enumerate(_slopes):
+            durations = _data.get_duration_axis()[_data.get_duration_axis() >= _duration_0]
+            x_offset = len(_data.get_duration_axis()[_data.get_duration_axis() < _duration_0])
+            lambdas = durations * slope / _sst_gmt_factor  # slopes are in km/degC GMT change. Therefore, translate into km/degC SST change:
+            lambdas = lambdas[lambdas <= _data.get_lambda_axis()[-1]]
+            durations = durations[:len(lambdas)]
+            z = [interp(lambdas[i], durations[i])[0, 0] for i in range(len(durations))]
+            ax.plot(np.arange(len(durations)) + x_offset, z, label=string.ascii_uppercase[idx], linewidth=0.5)
+            # label=string.ascii_uppercase[idx] + ": {0:1.0f} km / $\degree C$".format(_slopes[idx] / 1e3))
+    else:
+        datastep_re = abs(_data.get_lambdavals()[1] - _data.get_lambdavals()[0])
+        datastep_dT = abs(_data.get_durationvals()[1] - _data.get_durationvals()[0])
+        num_slopes = len(_slope_data.slope_meta)
+        slope_markers = ['s', 'o', '<', '>', 'x', 'D']
+        slope_datapoints = get_slope_means_and_errors(_slope_data)
+        for (idx, slope), marker in zip(enumerate(sorted(list(slope_datapoints.keys()), reverse=False)), slope_markers[:num_slopes]):
+            mean_vals = slope_datapoints[slope]['mean_vals']
+            yerrors = slope_datapoints[slope]['yerrors']
+            x_vals = slope_datapoints[slope]['x_vals']
+            x_vals = [x / datastep_dT - 2. * datastep_dT * (num_slopes / 2 - 0.5 - idx) for x in x_vals]
+            ax.errorbar(x_vals, mean_vals, yerr=yerrors, fmt='o', label=string.ascii_uppercase[idx], linewidth=0.5,
+                        markersize=3, color='k', alpha=(1 - 0.2 * idx), marker=marker, capsize=1)
+    if _label is not None:
+        trans = transforms.blended_transform_factory(fig.transFigure, ax.transAxes)
+        for line_idx, line in enumerate(_label.split('\n')):
+            fig.text(0 + 0.04 * line_idx, 0.5, line, rotation=90, ha='left', va='center', transform=trans)
+    ax.legend(frameon=False)
     plt.show()
+
+
+def get_slope_means_and_errors(_slope_data: AggrData):
+    if _slope_data.shape[:3] != (1, 1, 1) or _slope_data.shape[-1] != 1:
+        raise ValueError("All dimensions of the datasets except lambda and duration.")
+    res = {}
+    for slope, points in _slope_data.slope_meta.items():
+        res[slope] = {}
+        mean_vals = []
+        yerrors = [[], []]
+        x_vals = []
+        for point, subpoints in points.items():
+            num_points = len(subpoints)
+            val_sum = 0
+            subpoint_vals = []
+            for (d, l) in subpoints:
+                subpoint_val = _slope_data.get_lambdavals(l).get_durationvals(d).data.flatten()[0]
+                val_sum += subpoint_val
+                subpoint_vals.append(subpoint_val)
+            x_vals.append(point[0])
+            mean = val_sum / num_points
+            mean_vals.append(mean)
+            yerrors[0].append(abs(min(subpoint_vals) - mean))
+            yerrors[1].append(abs(max(subpoint_vals) - mean))
+        res[slope]['mean_vals'] = np.array(mean_vals)
+        res[slope]['yerrors'] = np.array(yerrors)
+        res[slope]['x_vals'] = np.array(x_vals)
+    return res
 
 
 def make_region_impact_plot(_data: AggrData, _absolute_consumption_deviation_thres=1e8, _include_row=True,
@@ -696,91 +805,90 @@ def make_scatter_plot(_data: AggrData, _clip=365, _x_dim='direct_loss', _y_dim='
     plt.show()
 
 
-def make_agent_var_global_map(_sector='MINQ', _variable='incoming_demand', _dt=0, _re=0, _exclude_regions=None, _t_0=4,
-                              _t_agg=365, _cbar_lims=None, _numbering=None, _outfile=None, _data=None):
-    data_path = "/home/robin/repos/harvey_scaling/data/acclimate_output/HARVEY_econYear2015_dT_0_2.5_0.125__re0_100000.0_5000.0__ccFactor1.07/2021-08-19_16:30:34__disagg_new/"
-    datacap_path = None
-    if _data is None:
-        if _variable == 'incoming_demand':
-            datacap_path = data_path + "HARVEY_incoming_demand_t400_MINQ+PRIVSECTORS__data_cap.pk"
-        elif _variable == 'production':
-            datacap_path = data_path + "HARVEY_production_t400_MINQ+PRIVSECTORS__data_cap.pk"
-        elif _variable == 'demand':
-            datacap_path = data_path + "HARVEY_demand_t400_MINQ+PRIVSECTORS__data_cap.pk"
-        else:
-            raise ValueError("Variable can only be 'production' or 'incomig_demand' or data object must be given")
-        data = AggrData(pickle.load(open(datacap_path, 'rb')))
-    else:
-        if _variable not in _data.get_vars():
-            raise ValueError("passed dataset does not contain variable {}".format(_variable))
-        data = _data
-    data = data.get_vars(_variable)
+def make_agent_var_global_map(_data, _sector='MINQ', _variable='incoming_demand', _dt=0, _re=0, _exclude_regions=None, _t_0=4,
+                              _t_agg=365, _cbar_lims=None, _numbering=None, _outfile=None, _symmetric_cbar=True):
+    if _variable not in _data.get_vars():
+        raise ValueError("passed dataset does not contain variable {}".format(_variable))
+    _data = copy.deepcopy(_data.get_vars(_variable))
     if '-' in _sector:
         sec1, sec2 = _sector.split('-')
-        if sec1 not in data.get_sectors() or sec2 not in data.get_sectors():
+        if sec1 not in _data.get_sectors() or sec2 not in _data.get_sectors():
             raise ValueError("Either {} or {} could not be found in sectors.".format(sec1, sec2))
-        sec1_idx = np.where(np.array(list(data.get_sectors().keys())) == sec1)[0][0]
-        sec2_idx = np.where(np.array(list(data.get_sectors().keys())) == sec2)[0][0]
-        sec_data = data.data[:, :, sec1_idx:sec1_idx + 1, ...] - data.data[:, :, sec2_idx:sec2_idx + 1, ...]
-        data.data_capsule.data = np.concatenate((data.data, sec_data), axis=2)
-        data.data_capsule.sectors[_sector] = copy.deepcopy(data.data_capsule.sectors[sec1])
-        data.data_capsule.sectors[_sector].remove(sec2)
-    elif _sector not in data.get_sectors():
+        sec1_idx = np.where(np.array(list(_data.get_sectors().keys())) == sec1)[0][0]
+        sec2_idx = np.where(np.array(list(_data.get_sectors().keys())) == sec2)[0][0]
+        sec_data = _data.data[:, :, sec1_idx:sec1_idx + 1, ...] - _data.data[:, :, sec2_idx:sec2_idx + 1, ...]
+        _data.data_capsule.data = np.concatenate((_data.data, sec_data), axis=2)
+        _data.data_capsule.sectors[_sector] = copy.deepcopy(_data.data_capsule.sectors[sec1])
+        _data.data_capsule.sectors[_sector].remove(sec2)
+    elif _sector not in _data.get_sectors():
         raise ValueError("Sector {} not in data".format(_sector))
-    regions = list(set(data.get_regions().keys()) - set(WORLD_REGIONS.keys()))
+    regions = list(set(_data.get_regions().keys()) - set(WORLD_REGIONS.keys()))
     if _exclude_regions is not None:
         regions = list(set(regions) - set(_exclude_regions))
-    data = data.clip(_t_0, _t_0 + _t_agg)
-    data = data.get_regions(regions)
-    data = data.calc_change_to_baseline(mode='absolute', _aggregate=True)
-    data_array = data.get_sectors(_sector).get_lambdavals(_re).get_durationvals(_dt).get_data().flatten()
+    _data = _data.clip(_t_0, _t_0 + _t_agg)
+    _data = _data.get_regions(regions)
+    _data = _data.calc_change_to_baseline(mode='absolute', _aggregate=True)
+    data_array = _data.get_sectors(_sector).get_lambdavals(_re).get_durationvals(_dt).get_data().flatten()
     print('Total {} loss: {}'.format(_variable, data_array[data_array < 0].sum()))
     print('Total {} gains: {}'.format(_variable, data_array[data_array >= 0].sum()))
     data_array[data_array < 0] = data_array[data_array < 0] / abs(sum(data_array[(data_array < 0) & ~data_array.mask]))
     data_array[data_array >= 0] = data_array[data_array >= 0] / abs(
         sum(data_array[(data_array >= 0) & ~data_array.mask]))
-    for r, d in sorted(list(zip(data.get_regions(), data_array)), key=lambda x: x[1]):
+    data_array = data_array * 100
+    for r, d in sorted(list(zip(_data.get_regions(), data_array)), key=lambda x: x[1]):
         print(r, '{0:1.3f}'.format(d))
+    if _cbar_lims is None:
+        _cbar_lims = [data_array.min(), data_array.max()]
+    if _symmetric_cbar:
+        positive_scale_factor = abs(_cbar_lims[0]) / _cbar_lims[1]
+        data_array[data_array >= 0] = data_array[data_array >= 0] * positive_scale_factor
+        _cbar_lims[1] *= positive_scale_factor
     cm = create_colormap('custom',
-                         ['red', "white", 'blue'],
-                         xs=[0, (abs(min(data_array))) / (max(data_array) - min(data_array)),
-                             1] if _cbar_lims is None else [0, (
-                             abs(_cbar_lims[0])) / (_cbar_lims[1] - _cbar_lims[0]), 1]
+                         ['purple', "white", 'orange'],
+                         xs=[0, (abs(_cbar_lims[0])) / (_cbar_lims[1] - _cbar_lims[0]), 1], # alphas=[0.5, 0, 0.5]
                          )
     fig = plt.figure(figsize=(MAX_FIG_WIDTH_WIDE, MAX_FIG_WIDTH_WIDE * 0.44))
     gs = plt.GridSpec(1, 2, width_ratios=[1, 0.03])
     ax = fig.add_subplot(gs[0, 0])
     cax = fig.add_subplot(gs[0, 1])
     patchespickle_file = "/home/robin/repos/hurricanes_hindcasting_remake/global_map/map_robinson_0.1simplified.pkl.gz"
-    ylabel = None
-    if _variable == 'incoming_demand':
-        ylabel = 'incoming demand anomaly (relative to total change)'
-    elif _variable == 'production':
-        ylabel = 'production anomaly (relative to total change)'
-    elif _variable == 'demand':
-        ylabel = 'demand anomaly (relative to total change)'
-    else:
-        ylabel = '{} (relative to total change)'.format(_variable)
     make_map(patchespickle_file=patchespickle_file,
-             regions=data.get_regions(),
+             regions=_data.get_regions(),
              data=data_array,
              y_ticks=None,
-             y_label=ylabel,
-             numbering=_numbering,
+             y_label=' ',
+             numbering=None,
              numbering_fontsize=FSIZE_TINY,
              extend_c="both",
              ax=ax,
              cax=cax,
              cm=cm,
-             y_label_fontsize=FSIZE_TINY,
-             y_ticks_fontsize=FSIZE_TINY,
+             y_label_fontsize=FSIZE_SMALL,
+             y_ticks_fontsize=FSIZE_SMALL,
              ignore_regions=_exclude_regions,
              lims=None,
              only_usa=False,
              v_limits=_cbar_lims,
              show_cbar=True,
              )
+    if _symmetric_cbar:
+        cax_ticklabels = []
+        for tick in cax.get_yticks():
+            tick = float(tick)
+            if tick > 0:
+                tick = tick / positive_scale_factor
+            if abs(tick) >= 10:
+                tick_formatter = '{:1.0f}'
+            else:
+                tick_formatter = '{:1.1f}'
+            cax_ticklabels.append(tick_formatter.format(abs(tick)))
+        cax.set_yticklabels(cax_ticklabels)
     plt.tight_layout()
+    trans = transforms.blended_transform_factory(fig.transFigure, cax.transAxes)
+    fig.text(0.98, 0.5, 'share (%) of global', ha='right', va='center', rotation=90, transform=trans)
+    fig.text(1, 0.5, r'losses   $\longleftrightarrow$   gains', ha='right', va='center', rotation=90, transform=trans)
+    if _numbering is not None:
+        fig.text(0, min(ax.get_position().y1, 0.98), _numbering, fontweight='bold', ha='left', va='center')
     if _outfile is not None:
         plt.savefig(_outfile, dpi=300)
 
@@ -896,8 +1004,9 @@ def make_flow_var_global_map(_sector='MINQ', _variable='demand_request', _exclud
     #     plt.savefig(_outfile, dpi=300)
 
 
-def plot_gains_and_losses(_data: AggrData, _slopes=None, _region_group=None, _gauss_filter=None, _gauss_sigma=1,
-                          _gauss_truncate=1, r_sst_gmt_factor=1, _ylabel_divisor=1.0, _outfile=None, _numbering=None):
+def plot_gains_and_losses(_data: AggrData, _slopes=None, _region_group=None, _gauss_filter=False, _gauss_sigma=1,
+                          _gauss_truncate=1, _sst_gmt_factor=0.5, _ylabel_divisor=1.0, _outfile=None, _numbering=None,
+                          _x_label=True, _legend=False):
     if _data.get_sim_duration() != 1:
         raise ValueError('Must pass data with only one timestep')
     if len(_data.get_vars()) != 1:
@@ -907,7 +1016,6 @@ def plot_gains_and_losses(_data: AggrData, _slopes=None, _region_group=None, _ga
     regional_data = {}
     if _region_group is None:
         _region_group = 'WORLD'
-    # for region_name in _region_groups:
     subregions = list(set(WORLD_REGIONS[_region_group]) - set(WORLD_REGIONS.keys()))
     data_array = _data.get_regions(subregions).data / _ylabel_divisor
     data_array = data_array.reshape((len(subregions), len(_data.get_lambda_axis()), len(_data.get_duration_axis())))
@@ -917,7 +1025,7 @@ def plot_gains_and_losses(_data: AggrData, _slopes=None, _region_group=None, _ga
     data_losses[data_losses > 0] = 0
     data_gains = data_gains.sum(axis=0)
     data_losses = data_losses.sum(axis=0)
-    if _gauss_filter is not None:
+    if _gauss_filter:
         data_gains = gaussian_filter(data_gains, sigma=_gauss_sigma, mode='nearest', truncate=_gauss_truncate)
         data_losses = gaussian_filter(data_losses, sigma=_gauss_sigma, mode='nearest', truncate=_gauss_truncate)
     interp_gains = RectBivariateSpline(_data.get_lambda_axis(), _data.get_duration_axis(), data_gains, s=0)
@@ -928,9 +1036,21 @@ def plot_gains_and_losses(_data: AggrData, _slopes=None, _region_group=None, _ga
         'interp_losses': interp_losses,
         'interp_gains': interp_gains
     }
-    fig, (ax1, ax3) = plt.subplots(nrows=2, ncols=1, figsize=(MAX_FIG_WIDTH_NARROW, MAX_FIG_WIDTH_NARROW * 1.2),
-                                   gridspec_kw={'height_ratios': [0.7, 0.3]})
-    # ax2 = ax1.twinx()
+    height_scale = 0.85
+    if not _x_label:
+        height_scale = height_scale * 0.9
+    fig, ax = plt.subplots(figsize=(MAX_FIG_WIDTH_NARROW, MAX_FIG_WIDTH_NARROW * height_scale))
+    ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+    ax.xaxis.set_minor_locator(ticker.MultipleLocator(_data.dT_stepwidth / _sst_gmt_factor))
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+    ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
+    ax2 = ax.twiny()
+    ax2.spines['top'].set_position(('data', 0))
+    ax2.tick_params('x', direction='inout', pad=-12)
+    ax2.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+    # ax2.set_yticklabels([abs(t) for t in ax.get_yticks()])
+    # ax2.set_xticks(np.arange(0, _data.get_duration_axis().max() / _sst_gmt_factor + 0.1, 0.5))
+    ax2.set_xticklabels([])
     dT_sst_list = _data.get_duration_axis()
     for idx, slope in enumerate(_slopes):
         dT_gmt_list = dT_sst_list / _sst_gmt_factor
@@ -942,75 +1062,106 @@ def plot_gains_and_losses(_data: AggrData, _slopes=None, _region_group=None, _ga
         global_gains = np.array([regional_data[_region_group]['interp_gains'](re_list[i], dT_sst_list[i])[0, 0] for i in
                                  range(len(re_list))])
         dT_gmt_list = dT_gmt_list[:len(re_list)]
-        ax1.fill_between(dT_gmt_list, global_gains, color='orange', alpha=0.1, linewidth=0)
-        ax1.fill_between(dT_gmt_list, global_losses, color='purple', alpha=0.1, linewidth=0)
-        ax1.plot(dT_gmt_list, global_gains + global_losses, color='k', alpha=(1 - 0.2 * idx))
-        ax3.plot(dT_gmt_list, abs(global_gains / global_losses), color='k', alpha=(1 - 0.2 * idx), linestyle='--')
-        # print(global_gains)
-        # print(global_losses)
+        ax.fill_between(dT_gmt_list, global_gains, color='orange', alpha=0.1, linewidth=0)
+        ax.fill_between(dT_gmt_list, global_losses, color='purple', alpha=0.1, linewidth=0)
+        # ax.plot(dT_gmt_list, global_gains, color='orange', alpha=(1 - 0.2 * idx))
+        # ax.plot(dT_gmt_list, global_losses, color='purple', alpha=(1 - 0.2 * idx))
+        ax.plot(dT_gmt_list, global_gains + global_losses, color='k', alpha=(1 - 0.5 * idx**0.4),
+                label=string.ascii_uppercase[idx])
         print(global_gains / global_losses)
-        # for region_name in regional_data.keys():
-        #     if region_name != 'WORLD':
-        #         losses = np.array([regional_data[region_name]['interp_losses'](re_list[i], dT_sst_list[i])[0, 0] for i in range(len(re_list))])
-        #         gains = np.array([regional_data[region_name]['interp_gains'](re_list[i], dT_sst_list[i])[0, 0] for i in range(len(re_list))])
-        #         ax2.plot(dT_gmt_list, -losses / global_losses)
-        #         ax2.plot(dT_gmt_list, gains / global_gains)
-    # if abs(ax2.get_ylim()[0]) < ax2.get_ylim()[1]:
-    #     ax2.set_ylim(ax1.get_ylim()[0] / ax1.get_ylim()[1] * ax2.get_ylim()[1], ax2.get_ylim()[1])
-    # else:
-    #     ax2.set_ylim(ax2.get_ylim()[0], ax1.get_ylim()[1] / ax1.get_ylim()[0] * ax2.get_ylim()[0])
-    # ax1.spines['left'].set_position(('data', 0))
-    plt.tight_layout()
-    ax1.set_position((ax1.get_position().x0 + 0.1, ax1.get_position().y0, ax1.get_position().width - 0.1,
-                      ax1.get_position().height - 0.05))
-    ax3.set_position((ax3.get_position().x0 + 0.1, ax3.get_position().y0 + 0.03, ax3.get_position().width - 0.1,
-                      ax3.get_position().height - 0.03))
-    ax1.spines['bottom'].set_position(('data', 0))
-    ax1.spines['top'].set_visible(False)
-    ax1.spines['right'].set_visible(False)
-    ax1.tick_params('x', direction='inout', pad=-12)
-    ax1.set_yticklabels([abs(t) for t in ax1.get_yticks()])
-    ax1.set_xticks(np.arange(0, _data.get_duration_axis().max() / _sst_gmt_factor + 0.1, 0.5))
-    ax1.set_xticklabels([])
-    # ax1.set_xticks([])
-    # ax2.spines['bottom'].set_position(('data', 0))
-    # ax2.spines['left'].set_visible(False)
-    # ax2.spines['top'].set_visible(False)
-    # ax2.spines['bottom'].set_visible(False)
-    # ax.yaxis.get_major_ticks()[np.where(ax.get_yticks() == 0)[0][0]].set_visible(False)
-    # ax2.set_yticklabels(['{}%'.format(int(abs(t * 100))) for t in ax2.get_yticks()])
-    # ax3.spines['bottom'].set_position(('data', 0))
-    ax3.spines['top'].set_visible(False)
-    ax3.spines['right'].set_visible(False)
-    # ax3.tick_params('x', direction='inout', pad=-12)
-    ax3.set_yticklabels(['{0:2.1f}'.format(t * 100) for t in ax3.get_yticks()])
-    ax3.set_xticks(np.arange(0, _data.get_duration_axis().max() / _sst_gmt_factor + 0.1, 0.5))
-    trans = transforms.blended_transform_factory(fig.transFigure, ax1.transData)
-    ax1.text(0.03, 0.05, '   gains', rotation=90, transform=trans, va='bottom', ha='left', fontsize=FSIZE_MEDIUM)
-    ax1.text(0.03, 0.05, 'losses   ', rotation=90, transform=trans, va='top', ha='left', fontsize=FSIZE_MEDIUM)
+    if _legend:
+        ax.legend(loc='upper left', frameon=False)
+    # plt.tight_layout()
+    ax.set_position((0.25, 0.12 if _x_label else 0.04, 0.7, 0.7 / height_scale))
+    trans = transforms.blended_transform_factory(fig.transFigure, ax.transData)
+    ax.text(0.06, 0.05, '   gains', rotation=90, transform=trans, va='bottom', ha='left', fontsize=FSIZE_MEDIUM)
+    ax.text(0.06, 0.05, 'losses   ', rotation=90, transform=trans, va='top', ha='left', fontsize=FSIZE_MEDIUM)
     if _ylabel_divisor == 1e6:
         unit_label = '(billions of USD)'
     elif _ylabel_divisor == 1e3:
         unit_label = '(millions of USD)'
     elif _ylabel_divisor == 1:
         unit_label = '(thousands of USD)'
-    ax1.text(0.07, 0.05, unit_label, rotation=90, transform=trans, va='center', fontsize=FSIZE_MEDIUM)
-    # trans = transforms.blended_transform_factory(ax3.transAxes, ax3.transData)
-    ax3.text(0.5, -0.25, r'$\Delta T$ (°C)', transform=ax3.transAxes, ha='center', va='top', fontsize=FSIZE_MEDIUM)
-    trans = transforms.blended_transform_factory(fig.transFigure, ax3.transAxes)
-    ax3.text(0.03, 0.5, 'compensation', transform=trans, ha='left', va='center', fontsize=FSIZE_MEDIUM, rotation=90)
-    ax3.text(0.07, 0.5, '(% losses)', transform=trans, ha='left', va='center', fontsize=FSIZE_MEDIUM, rotation=90)
+    ax.text(0.10, 0.05, unit_label, rotation=90, transform=trans, va='center', fontsize=FSIZE_MEDIUM)
+    if _x_label:
+        trans = transforms.blended_transform_factory(ax.transAxes, fig.transFigure)
+        fig.text(0.5, 0 , r'$\Delta GMT$ (difference to $GMT_{2017}$ in °C)', ha='center', va='bottom', transform=trans)
+    else:
+        ax.set_xticklabels([])
     if _numbering is not None:
-        for (ax, number) in zip([ax1, ax3], _numbering):
-            trans = transforms.blended_transform_factory(fig.transFigure, ax.transAxes)
-            fig.text(0, 1.08, number, fontweight='bold', ha='left', va='bottom', fontsize=FSIZE_MEDIUM,
-                     transform=trans)
+        fig.text(0, 1, _numbering, fontweight='bold', ha='left', va='top')
+    if _outfile is not None:
+        plt.savefig(_outfile, dpi=300)
+
+
+def plot_compensation_gap(_data: AggrData, region, _t0=4, _t_agg=365, _sst_gmt_factor=0.5, _legend=True,
+                          _numbering=None, _xlabel=True, _ylabel=True, _outfile=None, _inplot_info=True):
+    if (_data.shape[0], _data.shape[2]) != (1, 1):
+        raise ValueError('Can only pass data with one variable and sector.')
+    if _data.slope_meta is None:
+        raise ValueError('Must pass slope ensemble dataset.')
+    _data = _data.get_regions(WORLD_REGIONS['WORLD']).clip(_t0, _t0 + _t_agg).aggregate('absolute_difference')
+    # clean_regions(_data)
+    _data_gains = copy.deepcopy(_data)
+    _data_losses = copy.deepcopy(_data)
+    _data_gains.data_capsule.data[_data.data < 0] = 0
+    _data_losses.data_capsule.data[_data.data > 0] = 0
+    _data_gains.data_capsule.data = np.abs(_data_gains.data)
+    _data_losses.data_capsule.data = np.abs(_data_losses.data)
+    clean_regions(_data_gains)
+    clean_regions(_data_losses)
+    _data = _data_gains
+    _data.data_capsule.data = (_data_gains.data / _data_losses.data - 1) * 100
+    fig_width = MAX_FIG_WIDTH_NARROW
+    fig_height = MAX_FIG_WIDTH_NARROW
+    y_scale = 1
+    if not _xlabel:
+        y_scale = 0.9
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height * y_scale))
+    ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+    ax_width = 0.85
+    ax_height = 0.85 / y_scale
+    ax_x0 = 0.13
+    ax_y0 = 1 - (ax_height + 0.02 / y_scale)
+    ax.set_position([ax_x0, ax_y0 , ax_width, ax_height])
+    num_slopes = len(_data.slope_meta)
+    x_stepwidth = (list(_data.slope_meta[0].keys())[0][0] - list(_data.slope_meta[0].keys())[1][0]) / _sst_gmt_factor
+    slope_markers = ['s', 'o', '<', '>', 'x', 'D']
+    for (idx, slope), marker in zip(enumerate(sorted(list(_data.slope_meta.keys()), reverse=False)), slope_markers[:num_slopes]):
+        datapoints = get_slope_means_and_errors(_data.get_regions(region))
+        mean_vals = datapoints[slope]['mean_vals']
+        yerrors = datapoints[slope]['yerrors']
+        x_vals = datapoints[slope]['x_vals'] / _sst_gmt_factor
+        x_vals = [x + x_stepwidth / (2.5 * num_slopes) * (num_slopes / 2 - 0.5 - idx) for x in x_vals]
+        ax.errorbar(x_vals, mean_vals, yerr=yerrors, fmt='o', label=string.ascii_uppercase[idx],
+                    linewidth=0.5, marker=marker, markersize=3, color='k', alpha=(1 - 0.2 * idx))
+    if _legend:
+        plt.legend(frameon=False)
+    if _inplot_info:
+        sector_name = list(_data.get_sectors().keys())[0]
+        if sector_name == 'PRIVSECTORS-MINQ':
+            sector_name = 'OTHE'
+        text = "{}-{}".format(sector_name, region)
+        ax.text(0.02, 0.02 / y_scale, text, transform=ax.transAxes, ha='left', va='bottom')
+    if _xlabel:
+        trans = transforms.blended_transform_factory(ax.transAxes, fig.transFigure)
+        fig.text(0.5, 0 / y_scale, r'$\Delta GMT$ (difference to $GMT_{2017}$ in °C)', ha='center', va='bottom', transform=trans)
+    if _ylabel:
+        trans = transforms.blended_transform_factory(fig.transFigure, ax.transAxes)
+        fig.text(0, 0.5 / y_scale, 'compensation gap (% losses)', rotation=90, ha='left', va='center',
+                 transform=trans)
+    if not _xlabel:
+        ax.set_xticklabels([])
+    if _numbering is not None:
+        trans = transforms.blended_transform_factory(fig.transFigure, ax.transAxes)
+        fig.text(0, 1, _numbering, fontweight='bold', ha='left', va='center', transform=trans)
     if _outfile is not None:
         plt.savefig(_outfile, dpi=300)
 
 
 def plot_global_gain_shares(_data: AggrData, _region_groups, _slopes=None, _gauss_filter=None, _gauss_sigma=1,
-                            _gauss_truncate=1, _sst_gmt_factor=1, _outfile=None, _numbering=None, _relative=True):
+                            _gauss_truncate=1, _sst_gmt_factor=0.5, _outfile=None, _numbering=None, _relative=True):
     if _data.get_sim_duration() != 1:
         raise ValueError('Must pass data with only one timestep')
     if len(_data.get_vars()) != 1:
@@ -1025,7 +1176,8 @@ def plot_global_gain_shares(_data: AggrData, _region_groups, _slopes=None, _gaus
         if region_name == 'WORLD':
             subregions = list(set(subregions) - set(WORLD_REGIONS.keys()))
         data_gains = _data.get_regions(subregions).data
-        data_gains = data_gains.reshape((len(subregions), len(_data.get_lambda_axis()), len(_data.get_duration_axis())))
+        # data_gains = data_gains.reshape((len(subregions), len(_data.get_lambda_axis()), len(_data.get_duration_axis())))
+        data_gains = data_gains[0, :, 0, :, :, 0]
         data_gains[data_gains < 0] = 0
         data_gains = data_gains.sum(axis=0)
         if _gauss_filter is not None:
@@ -1056,8 +1208,98 @@ def plot_global_gain_shares(_data: AggrData, _region_groups, _slopes=None, _gaus
     plt.tight_layout()
 
 
+def plot_global_shares_from_slope_dataset(_data: AggrData, _region_groups, _sst_gmt_factor=0.5, _outfile=None,
+                                          _numbering=None, _relative=True, _plot_gains=True, _t0=4, _t_agg=365,
+                                          _ylim=None, _ylabel=True, _xlabel=True, _bar_reg_label=True,
+                                          _inplot_legend=True, _inplot_sector_label=True):
+    if (_data.shape[0], _data.shape[2]) != (1, 1):
+        raise ValueError('Can only pass data with one variable and sector.')
+    _data = _data.get_regions(WORLD_REGIONS['WORLD']).clip(_t0, _t0 + _t_agg).aggregate('absolute_difference')
+    if _plot_gains:
+        _data.data_capsule.data[_data.data < 0] = 0
+    else:
+        _data.data_capsule.data[_data.data > 0] = 0
+    clean_regions(_data)
+    if _relative:
+        _data.data_capsule.data = _data.data / _data.get_regions('WORLD').data * 100
+    else:
+        _data.data_capsule.data = _data.data / 1e6
+    y_scale = 1.0
+    if not _xlabel:
+        y_scale = 0.9
+    fig, ax = plt.subplots(figsize=(MAX_FIG_WIDTH_NARROW, MAX_FIG_WIDTH_NARROW * y_scale))
+    ax_width = 0.85
+    ax_height = 0.85 / y_scale
+    ax_x0 = 0.13
+    ax_y0 = 1 - (ax_height + 0.02 / y_scale)
+    ax.set_position([ax_x0, ax_y0, ax_width, ax_height])
+    num_slopes = len(_data.slope_meta.keys())
+    bar_width = 0.2
+    for slope_idx, slope in enumerate(sorted(list(_data.slope_meta.keys()), reverse=False)):
+        pre_mean_vals = None
+        for region_idx, region_group in enumerate(_region_groups):
+            slope_datapoints = get_slope_means_and_errors(_data.get_regions(region_group))
+            mean_vals = slope_datapoints[slope]['mean_vals']
+            yerrors = slope_datapoints[slope]['yerrors']
+            x_vals = slope_datapoints[slope]['x_vals'] / _sst_gmt_factor
+            if slope_idx == 0:
+                if _bar_reg_label:
+                    xmin = x_vals[0] - (num_slopes / 2 + 1.5) * bar_width
+                else:
+                    xmin = x_vals[0] - num_slopes / 2 * bar_width
+                ax.plot((xmin, x_vals[-1] + num_slopes / 2 * bar_width),
+                        (mean_vals[0], mean_vals[0]), c='k', linewidth=0.5)
+                text_ypos = pre_mean_vals[0] + (mean_vals[0] - pre_mean_vals[0]) / 2 if pre_mean_vals is not None else mean_vals[0] / 2
+                if _bar_reg_label:
+                    ax.text(xmin, text_ypos, region_group, ha='left', va='center', rotation=90)
+            if pre_mean_vals is not None:
+                mean_vals = mean_vals - pre_mean_vals
+            x_vals = [x - bar_width * (num_slopes / 2 - 0.5 - slope_idx) for x in x_vals]
+            # ax.errorbar(x_vals, mean_vals, yerr=yerrors, fmt='o', label=string.ascii_uppercase[idx], linewidth=1,
+            #             markersize=2)
+            ax.bar(x_vals, mean_vals, width=bar_width, yerr=yerrors, label=slope, align='center', bottom=pre_mean_vals,
+                   color=SLOPE_COLORS(slope_idx), alpha=(1 - region_idx * 0.2))
+            pre_mean_vals = pre_mean_vals + mean_vals if pre_mean_vals is not None else mean_vals
+            # for (x, y) in zip(x_vals, pre_mean_vals):
+            #     ax.plot((x - bar_width / 2, x + bar_width / 2), (y, y), c='k')
+            if _inplot_legend:
+                rectangle_height = 0.05
+                rectangle_width = 0.05
+                x = 0.75 + rectangle_width * slope_idx
+                y = 0.75 + rectangle_height * region_idx
+                rect = patches.Rectangle((x, y), rectangle_width, rectangle_height, edgecolor=None, linewidth=0,
+                                         facecolor=SLOPE_COLORS(slope_idx), alpha=(1 - slope_idx * 0.3),
+                                         transform=ax.transAxes)
+                ax.add_patch(rect)
+                if slope_idx == 0:
+                    ax.text(x - 0.01, y + rectangle_height / 2, region_group, ha='right', va='center', transform=ax.transAxes)
+                if region_idx == 0:
+                    ax.text(x + rectangle_width / 2, y - 0.01, string.ascii_uppercase[slope_idx], ha='center', va='top',
+                            transform=ax.transAxes)
+    if _inplot_sector_label:
+        sector_name = list(_data.get_sectors().keys())[0]
+        if sector_name == 'PRIVSECTORS-MINQ':
+            sector_name = 'OTHE'
+        ax.text(0.02, 0.98, sector_name, transform=ax.transAxes, ha='left', va='top')
+    if _ylabel:
+        if _relative:
+            ax.set_ylabel('share of global gains (%)')
+        else:
+            ax.set_ylabel('absolute gains (bn USD)')
+    if _xlabel:
+        ax.set_xlabel(r'$\Delta GMT$ (difference to $GMT_{2017}$ in °C)')
+    else:
+        ax.set_xticklabels([])
+    if _ylim is not None:
+        ax.set_ylim(_ylim)
+    if _numbering is not None:
+        fig.text(0, 1, _numbering, ha='left', va='top', fontweight='bold')
+    if _outfile is not None:
+        plt.savefig(_outfile, dpi=300)
+
+
 def plot_sector_gain_shares(_data: AggrData, _regions, _sector, _slopes=None, _gauss_filter=None, _gauss_sigma=1,
-                            _gauss_truncate=1, _sst_gmt_factor=1, _outfile=None, _numbering=None):
+                            _gauss_truncate=1, _sst_gmt_factor=0.5, _outfile=None, _numbering=None):
     if _data.get_sim_duration() != 1:
         raise ValueError('Must pass data with only one timestep')
     if _sector not in _data.get_sectors() or 'PRIVSECTORS' not in _data.get_sectors():
@@ -1066,11 +1308,14 @@ def plot_sector_gain_shares(_data: AggrData, _regions, _sector, _slopes=None, _g
         raise ValueError('Must pass data with only one variable')
     regional_data = {}
     for region_name in _regions:
-        sector_gain_shares = _data.get_regions(region_name).get_sectors(_sector).data / _data.get_regions(region_name).get_sectors('PRIVSECTORS').data
+        sector_gain_shares = _data.get_regions(region_name).get_sectors(_sector).data / _data.get_regions(
+            region_name).get_sectors('PRIVSECTORS').data
         if _gauss_filter is not None:
-            sector_gain_shares = gaussian_filter(sector_gain_shares, sigma=_gauss_sigma, mode='nearest', truncate=_gauss_truncate)
+            sector_gain_shares = gaussian_filter(sector_gain_shares, sigma=_gauss_sigma, mode='nearest',
+                                                 truncate=_gauss_truncate)
         sector_gain_shares = sector_gain_shares.reshape((len(_data.get_lambda_axis()), len(_data.get_duration_axis())))
-        interp_gain_shares = RectBivariateSpline(_data.get_lambda_axis(), _data.get_duration_axis(), sector_gain_shares, s=0)
+        interp_gain_shares = RectBivariateSpline(_data.get_lambda_axis(), _data.get_duration_axis(), sector_gain_shares,
+                                                 s=0)
         regional_data[region_name] = {
             'gain_shares': sector_gain_shares,
             'interp_gain_shares': interp_gain_shares
@@ -1146,6 +1391,43 @@ def calc_sector_export(_sector='MINQ',
     return exports
 
 
+def load_data():
+    slope_ensemble_path = "../data/acclimate_output/HARVEY_econYear2015_dT_0.0_2.5_0.5__slopes_0+10000+20000+40000__ccFactor1.07/2021-09-08_18:30:03/"
+    full_data_ensemble_path = "../data/acclimate_output/HARVEY_econYear2015_dT_0_2.5_0.125__re0_100000.0_5000.0__ccFactor1.07/2021-08-19_16:30:34__disagg_new/"
+    datasets = []
+    for ensemble_path in [full_data_ensemble_path, slope_ensemble_path]:
+        datacap = pickle.load(open(ensemble_path + "HARVEY_production_t400_MINQ+PRIVSECTORS__data_cap.pk", 'rb'))
+        meta = pickle.load(open(ensemble_path + "ensemble_meta.pk", 'rb'))
+        if 'slopes' in meta.keys():
+            slope_meta = meta['slopes']
+        else:
+            slope_meta = None
+        data = AggrData(datacap, _scaled_scenarios=meta['scaled_scenarios'], _slope_meta=slope_meta)
+        data.calc_sector_diff('PRIVSECTORS', 'MINQ', _inplace=True)
+        clean_regions(data)
+        datasets.append(data)
+    return datasets[0], datasets[1]
+
+
 if __name__ == '__main__':
+    # data, slope_data = load_data()
+    # make_agent_var_global_map(data, _sector='PRIVSECTORS-MINQ', _variable='production', _numbering='a', _outfile="../figures/maps/global_map_production_change_PRIVSECTORS-MINQ_dt0_re0.pdf", _cbar_lims=[-100, 10], _symmetric_cbar=True)
+    # make_agent_var_global_map(data, _sector='MINQ', _variable='production', _numbering='b', _outfile="../figures/maps/global_map_production_change_MINQ_dt0_re0.pdf", _cbar_lims=[-100, 10], _symmetric_cbar=True)
     # plot_initial_claims(_outfile="../figures/harvey_initial_claims.pdf")
+    # plot_radius_extension_impact(_outfile="../figures/radius_extension_impact.pdf")
+    # make_heatmap(data.get_regions('WORLD_wo_TX_LA').get_vars('production').get_sectors('PRIVSECTORS-MINQ').clip(4, 365 + 4).aggregate('relative_difference'), 'sum', _label='relative production\ndifference( % baseline)', _numbering=['a', 'c'], _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('production').get_sectors('PRIVSECTORS-MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.5, _plot_cuts=True, _y_ax_precision=3)
+    # make_heatmap(data.get_regions('WORLD_wo_TX_LA').get_vars('production').get_sectors('MINQ').clip(4, 365 + 4).aggregate('relative_difference'), 'sum', _label='relative production\ndifference (% baseline)', _numbering=['b', 'd'], _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('production').get_sectors('MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.5, _plot_cuts=True, _y_ax_precision=2)
+    # plot_global_shares_from_slope_dataset(slope_data.get_sectors('PRIVSECTORS-MINQ'), _region_groups=['MINQ25', 'MINQ50', 'MINQ75', 'MINQ95'], _sst_gmt_factor=0.5, _bar_reg_label=False, _numbering='a', _relative = True, _xlabel = False, _ylim = (0, 95), _outfile="../figures/gain_shares/global_gain_shares_PRIVSECTORS-MINQ_rel.pdf")
+    # plot_global_shares_from_slope_dataset(slope_data.get_sectors('MINQ'), _region_groups=['MINQ25', 'MINQ50', 'MINQ75', 'MINQ95'], _sst_gmt_factor=0.5, _ylim=(0, 95), _bar_reg_label=False, _inplot_legend=False, _numbering = 'b', _ylabel = False, _xlabel = False, _outfile="../figures/gain_shares/global_gain_shares_MINQ_rel.pdf")
+    # plot_global_shares_from_slope_dataset(slope_data.get_sectors('PRIVSECTORS-MINQ'), _region_groups=['MINQ25', 'MINQ50', 'MINQ75', 'MINQ95'], _sst_gmt_factor=0.5, _bar_reg_label=False, _numbering='c', _relative = False, _ylabel = True, _inplot_legend = False, _outfile="../figures/gain_shares/global_gain_shares_PRIVSECTORS-MINQ_abs.pdf")
+    # plot_global_shares_from_slope_dataset(slope_data.get_sectors('MINQ'), _region_groups=['MINQ25', 'MINQ50', 'MINQ75', 'MINQ95'], _sst_gmt_factor=0.5, _bar_reg_label=False, _numbering='d', _relative=False, _ylabel = False, _inplot_legend = False, _outfile="../figures/gain_shares/global_gain_shares_MINQ_abs.pdf")
+    # plot_gains_and_losses(data.aggregate('absolute_difference').get_sectors('PRIVSECTORS-MINQ'), [0, 5e3, 10e3, 20e3], _region_group='WORLD', _ylabel_divisor=1e6, _numbering='a', _legend=True, _x_label=False, _outfile="../figures/region_gains_and_losses/gains_losses_WORLD_PRIVSECTORS-MINQ.pdf")
+    # plot_gains_and_losses(data.aggregate('absolute_difference').get_sectors('MINQ'), [0, 5e3, 10e3, 20e3], _region_group='WORLD', _ylabel_divisor=1e6, _numbering='b', _x_label=False, _outfile="../figures/region_gains_and_losses/gains_losses_WORLD_MINQ.pdf")
+    # plot_gains_and_losses(data.aggregate('absolute_difference').get_sectors('PRIVSECTORS-MINQ'), [0, 5e3, 10e3, 20e3], _region_group='USA', _ylabel_divisor=1e6, _numbering='c', _outfile="../figures/region_gains_and_losses/gains_losses_USA_PRIVSECTORS-MINQ.pdf")
+    # plot_gains_and_losses(data.aggregate('absolute_difference').get_sectors('MINQ'), [0, 5e3, 10e3, 20e3], _region_group='USA', _ylabel_divisor=1e6, _numbering='d', _outfile="../figures/region_gains_and_losses/gains_losses_USA_MINQ.pdf")
+    # plot_compensation_gap(slope_data.get_sectors('PRIVSECTORS-MINQ'), region='WORLD', _numbering='a', _xlabel=False, _outfile="../figures/compensation_gap/compensation_gap_PRIVSECTORS-MINQ_WORLD.pdf")
+    # plot_compensation_gap(slope_data.get_sectors('MINQ'), region='WORLD', _numbering='b', _xlabel=False, _legend=False, _ylabel=False, _outfile="../figures/compensation_gap/compensation_gap_MINQ_WORLD.pdf")
+    # plot_compensation_gap(slope_data.get_sectors('PRIVSECTORS-MINQ'), region='USA', _numbering='c', _xlabel=True, _legend=False, _outfile="../figures/compensation_gap/compensation_gap_PRIVSECTORS-MINQ_USA.pdf")
+    # plot_compensation_gap(slope_data.get_sectors('MINQ'), region='USA', _numbering='d', _xlabel=True, _ylabel=False, _legend=False, _outfile="../figures/compensation_gap/compensation_gap_MINQ_USA.pdf")
     pass
+
