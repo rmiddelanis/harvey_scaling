@@ -20,13 +20,25 @@ WORLD_REGIONS = netcdf.world_regions
 if 'NAM' in WORLD_REGIONS:
     WORLD_REGIONS['NMA'] = WORLD_REGIONS.pop('NAM')
 if 'WORLD' not in WORLD_REGIONS:
-    WORLD_REGIONS['WORLD'] = list(set([ctry for wr in netcdf.world_regions.values() for ctry in wr]))
+    WORLD_REGIONS['WORLD'] = list(set([ctry for wr in netcdf.world_regions.values() for ctry in wr]) - set(WORLD_REGIONS.keys()))
 if 'ROW' not in WORLD_REGIONS:
     WORLD_REGIONS['ROW'] = list(set(WORLD_REGIONS['WORLD']) - {'USA'} - set(WORLD_REGIONS['USA']))
 if 'USA_REST_SANDY' not in WORLD_REGIONS:
     WORLD_REGIONS['USA_REST_SANDY'] = list(set(WORLD_REGIONS['USA']) - {'USA', 'US.NJ', 'US.NY'})
 if 'USA_REST_HARVEY' not in WORLD_REGIONS:
     WORLD_REGIONS['USA_REST_HARVEY'] = list(set(WORLD_REGIONS['USA']) - {'USA', 'US.TX'})
+WORLD_REGIONS['WORLD_wo_TX_LA'] = list(set(WORLD_REGIONS['WORLD']) - {'US.TX', 'US.LA'})
+WORLD_REGIONS['MINQ25'] = ['RUS', 'CAN', 'VEN']
+WORLD_REGIONS['MINQ50'] = ['RUS', 'CAN', 'VEN', 'AUS', 'NOR', 'IDN', 'DZA', 'SAU', 'IRN']
+WORLD_REGIONS['MINQ60'] = ['RUS', 'CAN', 'VEN', 'AUS', 'NOR', 'IDN', 'DZA', 'SAU', 'IRN', 'CHN', 'USA', 'KWT']
+WORLD_REGIONS['MINQ75'] = ['RUS', 'CAN', 'VEN', 'AUS', 'NOR', 'IDN', 'DZA', 'SAU', 'IRN', 'CHN', 'USA', 'KWT', 'GBR', 'BRA', 'NGA', 'AGO', 'ZAF', 'ARE', 'QAT', 'IND']
+WORLD_REGIONS['MINQ95'] = ['RUS', 'CAN', 'VEN', 'AUS', 'NOR', 'IDN', 'DZA', 'SAU', 'IRN', 'CHN', 'USA', 'KWT', 'GBR', 'BRA', 'NGA', 'AGO', 'ZAF', 'ARE', 'QAT', 'IND', 'MEX', 'IRQ', 'NLD', 'OMN', 'MYS', 'TTO', 'DEU', 'BEL', 'LBY', 'KAZ', 'CHL', 'VNM', 'FRA', 'ARG', 'BOL', 'DNK', 'COL', 'ESP', 'ITA', 'PER', 'BRN', 'UKR', 'ECU', 'SYR', 'JPN', 'CHE', 'YEM']
+for wr in ['MINQ25', 'MINQ50', 'MINQ60', 'MINQ75', 'MINQ95']:
+    for sr in list(WORLD_REGIONS[wr]):
+        if sr in WORLD_REGIONS.keys():
+            WORLD_REGIONS[wr].remove(sr)
+            if sr != 'USA':
+                WORLD_REGIONS[wr] = list(set(WORLD_REGIONS[wr] + WORLD_REGIONS[sr]) - {sr})
 
 SECTOR_GROUPS = {
     'ALLSECTORS': [
@@ -565,7 +577,8 @@ def calc_direct_production_loss(_data, _inplace=False):
     if not _inplace:
         return res
 
-# probably not needed anymore
+
+    # probably not needed anymore
 # def get_aggregated_var_over_area(_regions, _var, _data):
 #     if isinstance(_data, str):
 #         dataset = Dataset(_data, "r", format="NETCDF4")
