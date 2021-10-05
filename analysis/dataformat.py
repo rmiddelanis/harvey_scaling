@@ -6,7 +6,7 @@ import pandas as pd
 
 sys.path.append('/home/robinmid/repos/hurricanes_hindcasting_remake/analysis')
 sys.path.append('/home/robin/repos/hurricanes_hindcasting_remake/analysis')
-from analysis.utils import get_index_list, detect_stationarity_and_offset_in_series, calc_ts_characteristic
+from analysis.utils import get_index_list, detect_stationarity_and_offset_in_series, WORLD_REGIONS
 
 
 class DataCapsule:
@@ -31,7 +31,7 @@ class DataCapsule:
 
 # noinspection DuplicatedCode
 class AggrData:
-    def __init__(self, *args, _base_damage=None, _base_forcing=None, _scaled_scenarios=None):
+    def __init__(self, *args, _base_damage=None, _base_forcing=None, _scaled_scenarios=None, _slope_meta=None):
         if len(args) == 1:
             if type(args[0]).__name__ == "DataCapsule":
                 self.data_capsule = args[0]
@@ -44,6 +44,7 @@ class AggrData:
         self.base_damage = _base_damage
         self.base_forcing = _base_forcing
         self.scaled_scenarios = _scaled_scenarios
+        self.slope_meta = _slope_meta
 
     def get_vars(self, _vars=None):
         if _vars is None:
@@ -57,7 +58,8 @@ class AggrData:
             return AggrData(data_new, self.data_capsule.variables[vars_indices], self.data_capsule.regions,
                             self.data_capsule.sectors, self.data_capsule.lambda_axis,
                             self.data_capsule.duration_axis, _base_damage=self.base_damage,
-                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                            _slope_meta=self.slope_meta)
 
     def get_regions(self, _regions=None):
         if _regions is None:
@@ -75,7 +77,7 @@ class AggrData:
             return AggrData(data_new, self.data_capsule.variables, regions_new, self.data_capsule.sectors,
                             self.data_capsule.lambda_axis, self.data_capsule.duration_axis,
                             _base_damage=self.base_damage, _base_forcing=self.base_forcing,
-                            _scaled_scenarios=self.scaled_scenarios)
+                            _scaled_scenarios=self.scaled_scenarios, _slope_meta=self.slope_meta)
 
     def get_sectors(self, _sectors=None):
         if _sectors is None:
@@ -93,7 +95,7 @@ class AggrData:
             return AggrData(data_new, self.data_capsule.variables, self.data_capsule.regions, sectors_new,
                             self.data_capsule.lambda_axis, self.data_capsule.duration_axis,
                             _base_damage=self.base_damage, _base_forcing=self.base_forcing,
-                            _scaled_scenarios=self.scaled_scenarios)
+                            _scaled_scenarios=self.scaled_scenarios, _slope_meta=self.slope_meta)
 
     def get_lambdavals(self, _lambdavals=None):
         if _lambdavals is None:
@@ -107,7 +109,8 @@ class AggrData:
             return AggrData(data_new, self.data_capsule.variables, self.data_capsule.regions, self.data_capsule.sectors,
                             self.data_capsule.lambda_axis[lambda_indices],
                             self.data_capsule.duration_axis, _base_damage=self.base_damage,
-                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                            _slope_meta=self.slope_meta)
 
     def get_durationvals(self, _durationvals=None):
         if _durationvals is None:
@@ -121,7 +124,8 @@ class AggrData:
             return AggrData(data_new, self.data_capsule.variables, self.data_capsule.regions, self.data_capsule.sectors,
                             self.data_capsule.lambda_axis,
                             self.data_capsule.duration_axis[duration_indices], _base_damage=self.base_damage,
-                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                            _slope_meta=self.slope_meta)
 
     def get_duration_axis(self):
         return self.data_capsule.duration_axis
@@ -141,7 +145,7 @@ class AggrData:
         return AggrData(self.data_capsule.data[..., _from:_to], self.data_capsule.variables, self.data_capsule.regions,
                         self.data_capsule.sectors, self.data_capsule.lambda_axis,
                         self.data_capsule.duration_axis, _base_damage=self.base_damage, _base_forcing=self.base_forcing,
-                        _scaled_scenarios=self.scaled_scenarios)
+                        _scaled_scenarios=self.scaled_scenarios, _slope_meta=self.slope_meta)
 
     @property
     def data(self):
@@ -153,6 +157,14 @@ class AggrData:
     @property
     def shape(self):
         return self.data_capsule.data.shape
+
+    @property
+    def dT_stepwidth(self):
+        return self.data_capsule.duration_axis[1] - self.data_capsule.duration_axis[0]
+
+    @property
+    def re_stepwidth(self):
+        return self.data_capsule.lambda_axis[1] - self.data_capsule.lambda_axis[0]
 
     def get_sim_duration(self):
         return self.data_capsule.data.shape[-1]
@@ -173,7 +185,8 @@ class AggrData:
             return AggrData(data_new, vars_new, self.data_capsule.regions,
                             self.data_capsule.sectors, self.data_capsule.lambda_axis,
                             self.data_capsule.duration_axis, _base_damage=self.base_damage,
-                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                            _slope_meta=self.slope_meta)
 
     def drop_var(self, _name, _inplace=False):
         if _name not in self.get_vars():
@@ -188,7 +201,25 @@ class AggrData:
             return AggrData(data_new, vars_new, self.data_capsule.regions,
                             self.data_capsule.sectors, self.data_capsule.lambda_axis,
                             self.data_capsule.duration_axis, _base_damage=self.base_damage,
-                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                            _slope_meta=self.slope_meta)
+
+    def drop_region(self, _name, _inplace=False):
+        if _name not in self.get_regions():
+            print('Region {} is not contained in data. Doing nothing.'.format(_name))
+            return
+        regions_new = copy.deepcopy(self.get_regions())
+        regions_new.pop(_name)
+        data_new = self.get_regions(list(regions_new.keys())).get_data()
+        if _inplace:
+            self.data_capsule.data = data_new
+            self.data_capsule.regions = regions_new
+        else:
+            return AggrData(data_new, self.data_capsule.variables, regions_new,
+                            self.data_capsule.sectors, self.data_capsule.lambda_axis,
+                            self.data_capsule.duration_axis, _base_damage=self.base_damage,
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                            _slope_meta=self.slope_meta)
 
     def calc_prices(self, vars=None, _inplace=False):
         if vars == None:
@@ -212,7 +243,8 @@ class AggrData:
             return AggrData(data_new, vars_new, self.data_capsule.regions,
                             self.data_capsule.sectors, self.data_capsule.lambda_axis,
                             self.data_capsule.duration_axis, _base_damage=self.base_damage,
-                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                            _slope_meta=self.slope_meta)
 
     def calc_eff_prod_capacity(self, _inplace=False):
         if 'effective_production_capacity' in self.get_vars():
@@ -234,7 +266,8 @@ class AggrData:
             return AggrData(data_new, vars_new, self.data_capsule.regions,
                             self.data_capsule.sectors, self.data_capsule.lambda_axis,
                             self.data_capsule.duration_axis, _base_damage=self.base_damage,
-                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                            _slope_meta=self.slope_meta)
 
     def calc_eff_forcing(self, _inplace=False):
         if 'effective_forcing' in self.get_vars():
@@ -286,7 +319,8 @@ class AggrData:
             return AggrData(data_new, vars_new, self.data_capsule.regions,
                             self.data_capsule.sectors, self.data_capsule.lambda_axis,
                             self.data_capsule.duration_axis, _base_damage=self.base_damage,
-                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                            _slope_meta=self.slope_meta)
 
     def calc_change_to_baseline(self, mode, _inplace=False, _aggregate=False):
         print('Calculating relative change to baseline values of all variables. Make sure that t=0 is the baseline'
@@ -309,7 +343,8 @@ class AggrData:
             return AggrData(data_new, vars_new, self.data_capsule.regions,
                             self.data_capsule.sectors, self.data_capsule.lambda_axis,
                             self.data_capsule.duration_axis, _base_damage=self.base_damage,
-                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                            _slope_meta=self.slope_meta)
 
     def calc_demand_production_gap(self, _inplace=False):
         if 'demand_production_gap' in self.get_vars():
@@ -330,7 +365,8 @@ class AggrData:
             return AggrData(data_new, vars_new, self.data_capsule.regions,
                             self.data_capsule.sectors, self.data_capsule.lambda_axis,
                             self.data_capsule.duration_axis, _base_damage=self.base_damage,
-                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                            _slope_meta=self.slope_meta)
 
     def calc_desired_overproduction_capacity(self, _inplace=False):
         if 'desired_overproduction_capacity' in self.get_vars():
@@ -352,7 +388,8 @@ class AggrData:
             return AggrData(data_new, vars_new, self.data_capsule.regions,
                             self.data_capsule.sectors, self.data_capsule.lambda_axis,
                             self.data_capsule.duration_axis, _base_damage=self.base_damage,
-                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                            _slope_meta=self.slope_meta)
 
     def aggregate(self, _method, _clip=None, _vars=None):
         if self.get_sim_duration() <= 1:
@@ -375,7 +412,8 @@ class AggrData:
         return AggrData(data_new, vars_new, self.data_capsule.regions,
                         self.data_capsule.sectors, self.data_capsule.lambda_axis,
                         self.data_capsule.duration_axis, _base_damage=self.base_damage,
-                        _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+                        _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                        _slope_meta=self.slope_meta)
 
     def calc_sector_diff(self, sec1, sec2, _inplace=False):
         if sec1 not in self.get_sectors() or sec2 not in self.get_sectors():
@@ -395,7 +433,8 @@ class AggrData:
             return AggrData(data_new, self.data_capsule.variables, self.data_capsule.regions,
                             new_sectors, self.data_capsule.lambda_axis,
                             self.data_capsule.duration_axis, _base_damage=self.base_damage,
-                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                            _slope_meta=self.slope_meta)
 
     def aggregate_regions(self, region_list, _name=None, _inplace=False):
         for r in region_list:
@@ -417,7 +456,8 @@ class AggrData:
             return AggrData(data_new, self.data_capsule.variables, new_regions,
                             self.data_capsule.sectors, self.data_capsule.lambda_axis,
                             self.data_capsule.duration_axis, _base_damage=self.base_damage,
-                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios)
+                            _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
+                            _slope_meta=self.slope_meta)
 
 
 def have_equal_shape(data1: AggrData, data2: AggrData):
@@ -455,3 +495,10 @@ def calc_dataset_stationarity_and_offset(_data: AggrData, **kwargs):
     columns = ['from', 'to', 'offset']
     df = pd.DataFrame(df[['from', 'to', 'offset']].to_numpy(), index=index, columns=columns).sort_index()
     return df
+
+
+def clean_regions(_data: AggrData):
+    for r in WORLD_REGIONS.keys():
+        if r in _data.get_regions():
+            _data.drop_region(r, _inplace=True)
+        _data.aggregate_regions(list(set(WORLD_REGIONS[r]) - set(WORLD_REGIONS.keys())), _name=r, _inplace=True)
