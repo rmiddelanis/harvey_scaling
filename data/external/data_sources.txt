@@ -1,0 +1,2 @@
+TXICLAIMS_2016_to_2018.csv:
+https://fred.stlouisfed.org/series/TXICLAIMS
