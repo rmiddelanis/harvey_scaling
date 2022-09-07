@@ -1,3 +1,0 @@
-from sst_gmt_relationship.grid_weights import calc_grid_weights
-
-calc_grid_weights('north_atlantic_ocean')
