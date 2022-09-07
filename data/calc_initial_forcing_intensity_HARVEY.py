@@ -36,10 +36,7 @@ storm = 'HARVEY'
 states = ['TX', 'LA']
 economic_year = 2015
 hazard_year = 2017
-# radius_extensions = [0, 100e3, 200e3, 300e3]
-# radius_extensions = [10000 + i * 10000 for i in range(10)]
 radius_extensions = [0 + i * 10000 for i in range(11)]
-# radius_extensions = np.arange(0, 100000 + 1, 10000)
 alpha = 1.87
 baseline_nc_path = os.path.join(rootdir, 'data/external/EORA_{}_baseline/output.nc'.format(economic_year))
 county_gdp_path = os.path.join(rootdir, 'data/external/all_counties_GDP_2012_2015_2017.csv')
@@ -80,24 +77,16 @@ def alpha_shape(_points, alpha):
     tri = Delaunay(coords)
     edges = set()
     edge_points = []
-    # loop over triangles:
-    # ia, ib, ic = indices of corner points of the
-    # triangle
     for ia, ib, ic in tri.vertices:
         pa = coords[ia]
         pb = coords[ib]
         pc = coords[ic]
-        # Lengths of sides of triangle
         a = math.sqrt((pa[0] - pb[0]) ** 2 + (pa[1] - pb[1]) ** 2)
         b = math.sqrt((pb[0] - pc[0]) ** 2 + (pb[1] - pc[1]) ** 2)
         c = math.sqrt((pc[0] - pa[0]) ** 2 + (pc[1] - pa[1]) ** 2)
-        # Semiperimeter of triangle
         s = (a + b + c) / 2.0
-        # Area of triangle by Heron's formula
         area = math.sqrt(s * (s - a) * (s - b) * (s - c))
         circum_r = a * b * c / (4.0 * area)
-        # Here's the radius filter.
-        # print circum_r
         if circum_r < 1.0e6 / alpha:
             add_edge(edges, edge_points, coords, ia, ib)
             add_edge(edges, edge_points, coords, ib, ic)
