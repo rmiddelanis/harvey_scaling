@@ -37,7 +37,9 @@ states = ['TX', 'LA']
 economic_year = 2015
 hazard_year = 2017
 # radius_extensions = [0, 100e3, 200e3, 300e3]
-radius_extensions = [10000 + i * 10000 for i in range(10)]#np.arange(0, 100000 + 1, 10000)
+# radius_extensions = [10000 + i * 10000 for i in range(10)]
+radius_extensions = [0 + i * 10000 for i in range(11)]
+# radius_extensions = np.arange(0, 100000 + 1, 10000)
 alpha = 1.87
 baseline_nc_path = os.path.join(rootdir, 'data/external/EORA_{}_baseline/output.nc'.format(economic_year))
 county_gdp_path = os.path.join(rootdir, 'data/external/all_counties_GDP_2012_2015_2017.csv')
@@ -110,17 +112,6 @@ def linreg(_x, _y):
     _y = np.asarray(_y)
     _A = np.vstack([_x, np.ones(len(_x))]).T
     return np.linalg.lstsq(_A, _y, rcond=None)[0]
-
-
-def clausius_clapeyron_factor(_delta_sst):
-    return 1.07 ** _delta_sst
-
-
-def get_initial_forcing_int(_delta_r, _state):
-    _m = initial_forcing_intensities['params'][_state]['m']
-    _c = initial_forcing_intensities['params'][_state]['c']
-    f0_i = _m * _delta_r + _c
-    return f0_i
 
 
 def load_hwm():
@@ -198,5 +189,5 @@ if __name__ == '__main__':
         m_f0, c_f0 = linreg(x, y_f0)
         initial_forcing_intensities['params'][state] = {'m': m_f0, 'c': c_f0}
 
-    with open(os.path.join(rootdir, 'data/generated/initial_forcing_params.json', 'w')) as f:
+    with open(os.path.join(rootdir, 'data/generated/initial_forcing_params.json'), 'w') as f:
         json.dump(initial_forcing_intensities, f)

@@ -1,0 +1,87 @@
+BEA_line_code,BEA_description,NAICS_level,has_child,EORA_sector
+1,All industry total,-,1,-
+2,  Private industries,0,1,-
+3,"    Agriculture, forestry, fishing and hunting",1,1,AGRI+FISH
+4,      Farms,2,0,AGRI
+5,"      Forestry, fishing, and related activities",2,0,AGRI+FISH
+6,"    Mining, quarrying, and oil and gas extraction",1,1,MINQ
+7,      Oil and gas extraction,2,0,MINQ
+8,      Mining (except oil and gas),2,0,MINQ
+9,      Support activities for mining,2,0,MINQ
+10,    Utilities,1,0,ELWA
+11,    Construction,1,0,CONS
+12,    Manufacturing,1,1,WOOD+OILC+METL+MACH+TREQ+MANU+FOOD+TEXT+WHOT+RETT
+13,      Durable goods manufacturing,2,1,WOOD+OILC+METL+MACH+TREQ+MANU
+14,        Wood product manufacturing,3,0,WOOD
+15,        Nonmetallic mineral product manufacturing,3,0,OILC
+16,        Primary metal manufacturing,3,0,METL
+17,        Fabricated metal product manufacturing,3,0,METL
+18,        Machinery manufacturing,3,0,MACH
+19,        Computer and electronic product manufacturing,3,0,MACH
+20,"        Electrical equipment, appliance, and component manufacturing",3,0,MACH
+21,"        Motor vehicles, bodies and trailers, and parts manufacturing",3,0,TREQ
+22,        Other transportation equipment manufacturing,3,0,TREQ
+23,        Furniture and related product manufacturing,3,0,MANU
+24,        Miscellaneous manufacturing,3,0,MANU
+25,      Nondurable goods manufacturing,2,1,FOOD+TEXL+WOOD+OILC+WHOT+RETT
+26,        Food and beverage and tobacco product manufacturing,3,0,FOOD
+27,        Textile mills and textile product mills,3,0,TEXL
+28,"        Apparel, leather, and allied product manufacturing",3,0,TEXL
+29,        Paper manufacturing,3,0,WOOD
+30,        Printing and related support activities,3,0,WOOD
+31,        Petroleum and coal products manufacturing,3,0,OILC
+32,        Chemical manufacturing,3,0,OILC
+33,        Plastics and rubber products manufacturing,3,0,OILC
+34,    Wholesale trade,1,0,WHOT
+35,    Retail trade,1,0,RETT
+36,    Transportation and warehousing,1,1,TRAN
+37,      Air transportation,2,0,TRAN
+38,      Rail transportation,2,0,TRAN
+39,      Water transportation,2,0,TRAN
+40,      Truck transportation,2,0,TRAN
+41,      Transit and ground passenger transportation,2,0,TRAN
+42,      Pipeline transportation,2,0,TRAN
+43,      Other transportation and support activities,2,0,TRAN
+44,      Warehousing and storage,2,0,TRAN
+45,    Information,1,1,COMM
+46,      Publishing industries (except Internet),2,0,COMM
+47,      Motion picture and sound recording industries,2,0,COMM
+48,      Broadcasting (except Internet) and telecommunications,2,0,COMM
+49,"      Data processing, hosting, and other information services",2,0,COMM
+50,"    Finance, insurance, real estate, rental, and leasing",1,1,FINC
+51,      Finance and insurance,2,1,FINC
+52,"        Monetary Authorities- central bank, credit intermediation, and related services",3,0,FINC
+53,"        Securities, commodity contracts, and other financial investments and related activities",3,0,FINC
+54,        Insurance carriers and related activities,3,0,FINC
+55,"        Funds, trusts, and other financial vehicles",3,0,FINC
+56,      Real estate and rental and leasing,2,1,FINC
+57,        Real estate,3,0,FINC
+58,        Rental and leasing services and lessors of nonfinancial intangible assets,3,0,FINC
+59,    Professional and business services,1,1,ADMI+COMM+RECY
+60,"      Professional, scientific, and technical services",2,1,ADMI+COMM
+61,        Legal services,3,0,ADMI
+62,        Computer systems design and related services,3,0,COMM
+63,"        Miscellaneous professional, scientific, and technical services",3,0,ADMI
+64,      Management of companies and enterprises,2,0,ADMI
+65,      Administrative and support and waste management and remediation services,2,1,RECY
+66,        Administrative and support services,3,0,RECY
+67,        Waste management and remediation services,3,0,RECY
+68,"    Educational services, health care, and social assistance",1,1,EDHE
+69,      Educational services,2,0,EDHE
+70,      Health care and social assistance,2,1,EDHE
+71,        Ambulatory health care services,3,0,EDHE
+72,        Hospitals,3,0,EDHE
+73,        Nursing and residential care facilities,3,0,EDHE
+74,        Social assistance,3,0,EDHE
+75,"    Arts, entertainment, recreation, accommodation, and food services",1,1,GAST+FOOD
+76,"      Arts, entertainment, and recreation",2,1,GAST
+77,"        Performing arts, spectator sports, museums, and related activities",3,0,GAST
+78,"        Amusement, gambling, and recreation industries",3,0,GAST
+79,      Accommodation and food services,2,1,GAST+FOOD
+80,        Accommodation,3,0,GAST
+81,        Food services and drinking places,3,0,FOOD
+82,    Other services (except government and government enterprises),1,0,OTHE
+83,  Government and government enterprises,0,1,ADMI
+84,    Federal civilian,1,0,ADMI
+85,    Military,1,0,ADMI
+86,    State and local,1,0,ADMI

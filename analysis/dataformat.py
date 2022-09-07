@@ -3,10 +3,14 @@ import copy
 import numpy as np
 import sys
 import pandas as pd
+import xarray as xr
 
-sys.path.append('/home/robinmid/repos/hurricanes_hindcasting_remake/analysis')
-sys.path.append('/home/robin/repos/hurricanes_hindcasting_remake/analysis')
+sys.path.append('/home/robinmid/repos/hurricanes_hindcasting_remake/')
+sys.path.append('/home/robin/repos/hurricanes_hindcasting_remake/')
 from analysis.utils import get_index_list, detect_stationarity_and_offset_in_series, WORLD_REGIONS
+
+sys.path.append('/home/robin/repos/post-processing//')
+from acclimate.dataset import AcclimateOutput
 
 
 class DataCapsule:
@@ -97,7 +101,7 @@ class AggrData:
                             _base_damage=self.base_damage, _base_forcing=self.base_forcing,
                             _scaled_scenarios=self.scaled_scenarios, _slope_meta=self.slope_meta)
 
-    def get_lambdavals(self, _lambdavals=None):
+    def get_re(self, _lambdavals=None):
         if _lambdavals is None:
             return self.data_capsule.lambda_axis
         else:
@@ -112,7 +116,7 @@ class AggrData:
                             _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
                             _slope_meta=self.slope_meta)
 
-    def get_durationvals(self, _durationvals=None):
+    def get_dt(self, _durationvals=None):
         if _durationvals is None:
             return self.data_capsule.duration_axis
         else:
@@ -127,10 +131,10 @@ class AggrData:
                             _base_forcing=self.base_forcing, _scaled_scenarios=self.scaled_scenarios,
                             _slope_meta=self.slope_meta)
 
-    def get_duration_axis(self):
+    def get_dt_axis(self):
         return self.data_capsule.duration_axis
 
-    def get_lambda_axis(self):
+    def get_re_axis(self):
         return self.data_capsule.lambda_axis
 
     def clip(self, *args):
@@ -439,8 +443,11 @@ class AggrData:
     def aggregate_regions(self, region_list, _name=None, _inplace=False):
         for r in region_list:
             if r not in self.get_regions():
-                raise ValueError("{} could not be found in regions.".format(r))
-        r_data = self.get_regions(region_list).data.sum(axis=1, keepdims=True)
+                print("Warning. {} could not be found in regions.".format(r))
+                region_list = list(set(region_list) - {r})
+                if len(region_list) == 0:
+                    raise ValueError("No regions left to aggregate.")
+        r_data = np.nansum(self.get_regions(region_list).data, axis=1, keepdims=True)
         data_new = np.concatenate((self.data, r_data), axis=1)
         new_regions = copy.deepcopy(self.data_capsule.regions)
         if _name is None:
@@ -464,8 +471,8 @@ def have_equal_shape(data1: AggrData, data2: AggrData):
     return (np.all(data1.get_vars() == data2.get_vars()) and
             np.all(data1.get_regions() == data1.get_regions()) and
             np.all(data1.get_sectors() == data2.get_sectors()) and
-            np.all(data1.get_durationvals() == data2.get_durationvals()) and
-            np.all(data1.get_lambdavals() == data2.get_lambdavals()) and
+            np.all(data1.get_dt() == data2.get_dt()) and
+            np.all(data1.get_re() == data2.get_re()) and
             np.all(data1.shape == data2.shape))
 
 
@@ -475,9 +482,9 @@ def calc_dataset_stationarity_and_offset(_data: AggrData, **kwargs):
     for v in _data.get_vars():
         for r in _data.get_regions():
             for s in _data.get_sectors():
-                for l in _data.get_lambda_axis():
-                    for d in _data.get_duration_axis():
-                        ts = _data.get_vars(v).get_regions(r).get_sectors(s).get_lambdavals(l).get_durationvals(
+                for l in _data.get_re_axis():
+                    for d in _data.get_dt_axis():
+                        ts = _data.get_vars(v).get_regions(r).get_sectors(s).get_re(l).get_dt(
                             d).get_data().flatten()
                         segment_and_offset, recursion_round = detect_stationarity_and_offset_in_series(ts, **kwargs)
                         if len(segment_and_offset) == 0:
@@ -502,3 +509,8 @@ def clean_regions(_data: AggrData):
         if r in _data.get_regions():
             _data.drop_region(r, _inplace=True)
         _data.aggregate_regions(list(set(WORLD_REGIONS[r]) - set(WORLD_REGIONS.keys())), _name=r, _inplace=True)
+
+
+def load_from_xarray_data(data: xr.Dataset, baseline: xr.Dataset, sector_mapping: dict = None):
+    acclimate_data = AcclimateOutput(data=data, baseline=baseline)
+

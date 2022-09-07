@@ -8,19 +8,71 @@ import sys
 
 from scipy import signal
 
-sys.path.append('/home/robinmid/repos/acclimate/postproc/lib/acclimate')
-sys.path.append('/home/robin/repos/postproc/lib/acclimate/')
-import netcdf
 import datetime as dt
 import pandas as pd
 import matplotlib.pyplot as plt
-import us
+import pycountry as pc
 
-WORLD_REGIONS = netcdf.world_regions
-if 'NAM' in WORLD_REGIONS:
-    WORLD_REGIONS['NMA'] = WORLD_REGIONS.pop('NAM')
+WORLD_REGIONS = {
+    'AFR': [
+        'DZA', 'AGO', 'CPV', 'TZA', 'BWA', 'DJI', 'GIN', 'SYC', 'MAR', 'ZAF', 'BEN', 'CMR', 'LSO', 'TCD', 'MOZ', 'GNQ',
+        'COG', 'ETH', 'MDG', 'RWA', 'ZMB', 'CAF', 'SOM', 'ERI', 'GAB', 'STP', 'EGY', 'NAM', 'GHA', 'LBR', 'LBY', 'BFA',
+        'MRT', 'NGA', 'MWI', 'UGA', 'BDI', 'MUS', 'NER', 'SEN', 'GMB', 'ZWE', 'KEN', 'TUN', 'SWZ', 'CIV', 'TGO', 'MLI',
+        'SLE', 'COD', 'SDN', 'SDS'
+    ],
+    'ASI': [
+        'BGD', 'QAT', 'PAK', 'VNM', 'THA', 'NPL', 'YEM', 'PHL', 'SYR', 'MAC', 'GEO', 'TJK', 'PSE', 'IND', 'MDV', 'MMR',
+        'RUS', 'KOR', 'IRQ', 'IRN', 'ARE', 'BHR', 'ARM', 'PNG', 'JOR', 'MYS', 'PRK', 'KHM', 'HKG', 'SAU', 'LBN', 'CHN',
+        'KAZ', 'LKA', 'TKM', 'MNG', 'AFG', 'BTN', 'ISR', 'IDN', 'LAO', 'TUR', 'OMN', 'BRN', 'TWN', 'AZE', 'SGP', 'UZB',
+        'KWT', 'JPN', 'KGZ'
+    ],
+    'EUR': [
+        'BGR', 'FIN', 'ROU', 'BEL', 'GBR', 'HUN', 'BLR', 'GRC', 'AND', 'ANT', 'NOR', 'SMR', 'MDA', 'SRB', 'LTU', 'SWE',
+        'AUT', 'ALB', 'MKD', 'UKR', 'CHE', 'LIE', 'PRT', 'SVN', 'SVK', 'HRV', 'DEU', 'NLD', 'MNE', 'LVA', 'IRL', 'CZE',
+        'LUX', 'ISL', 'FRA', 'DNK', 'ITA', 'CYP', 'BIH', 'POL', 'EST', 'ESP', 'MLT', 'MCO'
+    ],
+    'LAM': [
+        'NIC', 'GUY', 'CRI', 'TTO', 'PAN', 'BLZ', 'VGB', 'HND', 'DOM', 'PER', 'COL', 'VEN', 'MEX', 'ABW', 'ARG', 'BHS',
+        'BOL', 'PRY', 'CHL', 'JAM', 'URY', 'HTI', 'ATG', 'SUR', 'ECU', 'GTM', 'CUB', 'BRB', 'BRA', 'CYM', 'SLV'
+    ],
+    'NMA': [
+        'GRL', 'CAN', 'BMU', 'USA'
+    ],
+    'OCE': [
+        'FJI', 'VUT', 'AUS', 'WSM', 'NZL', 'NCL', 'PYF'
+    ],
+    'ADB': [
+        'BGD', 'PAK', 'VNM', 'THA', 'NPL', 'PHL', 'GEO', 'TJK', 'IND', 'MDV', 'MMR', 'KOR', 'ARE', 'ARM', 'PNG', 'MYS',
+        'HKG', 'CHN', 'KAZ', 'TKM', 'MNG', 'AFG', 'BTN', 'IDN', 'LAO', 'TUR', 'TWN', 'AZE', 'UZB', 'JPN', 'KGZ'
+    ],
+    'EU28': [
+        'BGR', 'FIN', 'ROU', 'BEL', 'GBR', 'HUN', 'GRC', 'LTU', 'SWE', 'AUT', 'PRT', 'SVN', 'SVK', 'HRV', 'DEU', 'NLD',
+        'LVA', 'IRL', 'CZE', 'LUX', 'FRA', 'DNK', 'ITA', 'CYP', 'POL', 'EST', 'ESP', 'MLT'
+    ],
+    'OECD': [
+        'AUS', 'AUT', 'BEL', 'CAN', 'CHE', 'CHL', 'CZE', 'DEU', 'DNK', 'ESP', 'EST', 'FIN', 'FRA', 'GBR', 'GRC', 'HUN',
+        'IRL', 'ISL', 'ISR', 'ITA', 'JPN', 'KOR', 'LUX', 'LVA', 'MEX', 'NLD', 'NOR', 'NZL', 'POL', 'PRT', 'SVK', 'SVN',
+        'SWE', 'TUR', 'USA'
+    ],
+    'BRICS': [
+        'BRA', 'CHN', 'IND', 'RUS', 'ZAF'
+    ],
+    'CHN': [
+        'CN.AH', 'CN.BJ', 'CN.CQ', 'CN.FJ', 'CN.GS', 'CN.GD', 'CN.GX', 'CN.GZ', 'CN.HA', 'CN.HB', 'CN.HL', 'CN.HE',
+        'CN.HU', 'CN.HN', 'CN.JS', 'CN.JX', 'CN.JL', 'CN.LN', 'CN.NM', 'CN.NX', 'CN.QH', 'CN.SA', 'CN.SD', 'CN.SH',
+        'CN.SX', 'CN.SC', 'CN.TJ', 'CN.XJ', 'CN.XZ', 'CN.YN', 'CN.ZJ'
+    ],
+    'USA': [
+        'US.AL', 'US.AK', 'US.AZ', 'US.AR', 'US.CA', 'US.CO', 'US.CT', 'US.DE', 'US.DC', 'US.FL', 'US.GA', 'US.HI',
+        'US.ID', 'US.IL', 'US.IN', 'US.IA', 'US.KS', 'US.KY', 'US.LA', 'US.ME', 'US.MD', 'US.MA', 'US.MI', 'US.MN',
+        'US.MS', 'US.MO', 'US.MT', 'US.NE', 'US.NV', 'US.NH', 'US.NJ', 'US.NM', 'US.NY', 'US.NC', 'US.ND', 'US.OH',
+        'US.OK', 'US.OR', 'US.PA', 'US.RI', 'US.SC', 'US.SD', 'US.TN', 'US.TX', 'US.UT', 'US.VT', 'US.VA', 'US.WA',
+        'US.WV', 'US.WI', 'US.WY'
+    ]
+}
+
 if 'WORLD' not in WORLD_REGIONS:
-    WORLD_REGIONS['WORLD'] = list(set([ctry for wr in netcdf.world_regions.values() for ctry in wr]) - set(WORLD_REGIONS.keys()))
+    WORLD_REGIONS['WORLD'] = list(set([ctry for wr in WORLD_REGIONS.values() for ctry in wr]) - set(WORLD_REGIONS.keys()))
 if 'ROW' not in WORLD_REGIONS:
     WORLD_REGIONS['ROW'] = list(set(WORLD_REGIONS['WORLD']) - {'USA'} - set(WORLD_REGIONS['USA']))
 if 'USA_REST_SANDY' not in WORLD_REGIONS:
@@ -28,79 +80,97 @@ if 'USA_REST_SANDY' not in WORLD_REGIONS:
 if 'USA_REST_HARVEY' not in WORLD_REGIONS:
     WORLD_REGIONS['USA_REST_HARVEY'] = list(set(WORLD_REGIONS['USA']) - {'USA', 'US.TX'})
 WORLD_REGIONS['WORLD_wo_TX_LA'] = list(set(WORLD_REGIONS['WORLD']) - {'US.TX', 'US.LA'})
-WORLD_REGIONS['MINQ25'] = ['RUS', 'CAN', 'VEN']
-WORLD_REGIONS['MINQ50'] = ['RUS', 'CAN', 'VEN', 'AUS', 'NOR', 'IDN', 'DZA', 'SAU', 'IRN']
-WORLD_REGIONS['MINQ60'] = ['RUS', 'CAN', 'VEN', 'AUS', 'NOR', 'IDN', 'DZA', 'SAU', 'IRN', 'CHN', 'USA', 'KWT']
-WORLD_REGIONS['MINQ75'] = ['RUS', 'CAN', 'VEN', 'AUS', 'NOR', 'IDN', 'DZA', 'SAU', 'IRN', 'CHN', 'USA', 'KWT', 'GBR', 'BRA', 'NGA', 'AGO', 'ZAF', 'ARE', 'QAT', 'IND']
-WORLD_REGIONS['MINQ95'] = ['RUS', 'CAN', 'VEN', 'AUS', 'NOR', 'IDN', 'DZA', 'SAU', 'IRN', 'CHN', 'USA', 'KWT', 'GBR', 'BRA', 'NGA', 'AGO', 'ZAF', 'ARE', 'QAT', 'IND', 'MEX', 'IRQ', 'NLD', 'OMN', 'MYS', 'TTO', 'DEU', 'BEL', 'LBY', 'KAZ', 'CHL', 'VNM', 'FRA', 'ARG', 'BOL', 'DNK', 'COL', 'ESP', 'ITA', 'PER', 'BRN', 'UKR', 'ECU', 'SYR', 'JPN', 'CHE', 'YEM']
-for wr in ['MINQ25', 'MINQ50', 'MINQ60', 'MINQ75', 'MINQ95']:
+WORLD_REGIONS['MQ:25'] = ['RUS', 'CAN', 'VEN']
+WORLD_REGIONS['MQ:50'] = ['RUS', 'CAN', 'VEN', 'AUS', 'NOR', 'IDN', 'DZA', 'SAU', 'IRN']
+WORLD_REGIONS['MQ:60'] = ['RUS', 'CAN', 'VEN', 'AUS', 'NOR', 'IDN', 'DZA', 'SAU', 'IRN', 'CHN', 'USA', 'KWT']
+WORLD_REGIONS['MQ:75'] = ['RUS', 'CAN', 'VEN', 'AUS', 'NOR', 'IDN', 'DZA', 'SAU', 'IRN', 'CHN', 'USA', 'KWT', 'GBR',
+                          'BRA', 'NGA', 'AGO', 'ZAF', 'ARE', 'QAT', 'IND']
+WORLD_REGIONS['MQ:95'] = ['RUS', 'CAN', 'VEN', 'AUS', 'NOR', 'IDN', 'DZA', 'SAU', 'IRN', 'CHN', 'USA', 'KWT', 'GBR',
+                          'BRA', 'NGA', 'AGO', 'ZAF', 'ARE', 'QAT', 'IND', 'MEX', 'IRQ', 'NLD', 'OMN', 'MYS', 'TTO',
+                          'DEU', 'BEL', 'LBY', 'KAZ', 'CHL', 'VNM', 'FRA', 'ARG', 'BOL', 'DNK', 'COL', 'ESP', 'ITA',
+                          'PER', 'BRN', 'UKR', 'ECU', 'SYR', 'JPN', 'CHE', 'YEM']
+WORLD_REGIONS['AI-MQ:50'] = ['DEU', 'CHN', 'USA', 'JPN', 'FRA', 'ITA', 'GBR']
+WORLD_REGIONS['AI-MQ:75'] = ['DEU', 'CHN', 'USA', 'JPN', 'FRA', 'ITA', 'GBR', 'NLD', 'BEL', 'KOR', 'CAN', 'ESP', 'SGP',
+                             'CHE', 'MEX', 'RUS', 'IND', 'MYS']
+WORLD_REGIONS['AI-MQ:95'] = ['DEU', 'CHN', 'USA', 'JPN', 'FRA', 'ITA', 'GBR', 'NLD', 'BEL', 'KOR', 'CAN', 'ESP', 'SGP',
+                             'CHE', 'MEX', 'RUS', 'IND', 'MYS', 'SWE', 'AUT', 'THA', 'AUS', 'BRA', 'HKG', 'IDN', 'IRL',
+                             'CZE', 'TWN', 'DNK', 'POL', 'FIN', 'HUN', 'PHL', 'TUR', 'ZAF', 'NOR', 'ARG', 'ISR', 'ARE',
+                             'PRT', 'SVK', 'NZL', 'SAU', 'CHL']
+WORLD_REGIONS['AI:50'] = ['DEU', 'CHN', 'USA', 'JPN', 'FRA', 'ITA', 'GBR', 'NLD']
+WORLD_REGIONS['AI:75'] = ['DEU', 'CHN', 'USA', 'JPN', 'FRA', 'ITA', 'GBR', 'NLD', 'CAN', 'BEL', 'KOR', 'ESP', 'RUS',
+                              'SGP', 'CHE', 'MEX', 'IND', 'MYS', 'AUS', 'SWE']
+WORLD_REGIONS['AI:95'] = ['DEU', 'CHN', 'USA', 'JPN', 'FRA', 'ITA', 'GBR', 'NLD', 'CAN', 'BEL', 'KOR', 'ESP', 'RUS',
+                              'SGP', 'CHE', 'MEX', 'IND', 'MYS', 'AUS', 'SWE', 'AUT', 'IDN', 'THA', 'BRA', 'HKG', 'IRL',
+                              'CZE', 'DNK', 'TWN', 'POL', 'NOR', 'FIN', 'PHL', 'HUN', 'ZAF', 'VEN', 'TUR', 'SAU', 'ARE',
+                              'ARG', 'ISR', 'IRN', 'PRT', 'CHL', 'SVK', 'NZL', 'UKR', 'DZA', 'KWT']
+WORLD_REGIONS['TX_trade:50'] = ['CAN', 'MEX', 'JPN', 'DEU', 'GBR', 'VEN', 'KOR']
+WORLD_REGIONS['TX_trade:75'] = ['CAN', 'MEX', 'JPN', 'DEU', 'GBR', 'VEN', 'KOR', 'FRA', 'ITA', 'BRA', 'SGP', 'NLD',
+                                'AUS', 'IND', 'IRL', 'CHE', 'MYS', 'CN.GD', 'BEL', 'HKG', 'CN.JS', 'TWN', 'THA', 'CN.SD']
+WORLD_REGIONS['TX_trade:95'] = ['CAN', 'MEX', 'JPN', 'DEU', 'GBR', 'VEN', 'KOR', 'FRA', 'ITA', 'BRA', 'SGP', 'NLD',
+                                'AUS', 'IND', 'IRL', 'CHE', 'MYS', 'CN.GD', 'BEL', 'HKG', 'CN.JS', 'TWN', 'THA',
+                                'CN.SD', 'ESP', 'SAU', 'GUY', 'IDN', 'ISR', 'PHL', 'SWE', 'CN.ZJ', 'RUS', 'COL',
+                                'CN.HE', 'TTO', 'NGA', 'CN.SC', 'CN.HB', 'CN.HU', 'CN.HN', 'CN.LN', 'CHL', 'AUT',
+                                'DZA', 'ARG', 'CN.FJ', 'ZAF', 'DNK', 'CN.SH', 'TUR', 'NOR', 'CN.BJ', 'CN.AH', 'KWT',
+                                'FIN', 'CN.SA', 'CN.NM', 'DOM', 'CN.GX', 'CN.JX', 'CN.TJ', 'NZL', 'AGO', 'CN.CQ', 'ARE',
+                                'HUN', 'CN.HL', 'CRI']
+for wr in ['MQ:25', 'MQ:50', 'MQ:60', 'MQ:75', 'MQ:95', 'TX_trade:50', 'TX_trade:75', 'TX_trade:95', 'AI-MQ:50',
+           'AI-MQ:75', 'AI-MQ:95', 'AI:50', 'AI:75', 'AI:95']:
     for sr in list(WORLD_REGIONS[wr]):
         if sr in WORLD_REGIONS.keys():
             WORLD_REGIONS[wr].remove(sr)
-            if sr != 'USA':
-                WORLD_REGIONS[wr] = list(set(WORLD_REGIONS[wr] + WORLD_REGIONS[sr]) - {sr})
+            WORLD_REGIONS[wr] = list(set(WORLD_REGIONS[wr] + WORLD_REGIONS[sr]) - {sr})
+WORLD_REGIONS['MQ:50+USA'] = WORLD_REGIONS['MQ:50'] + list(set(WORLD_REGIONS['USA']) - {'USA'})
 
 SECTOR_GROUPS = {
     'ALLSECTORS': [
-        'FCON',
-        'AGRI',
-        'FISH',
-        'MINQ',
-        'FOOD',
-        'TEXL',
-        'WOOD',
-        'OILC',
-        'METL',
-        'MACH',
-        'TREQ',
-        'MANU',
-        'RECY',
-        'ELWA',
-        'CONS',
-        'REPA',
-        'WHOT',
-        'RETT',
-        'GAST',
-        'TRAN',
-        'COMM',
-        'FINC',
-        'ADMI',
-        'EDHE',
-        'HOUS',
-        'OTHE',
-        'REXI'
+        'FCON', 'AGRI', 'FISH', 'MINQ', 'FOOD', 'TEXL', 'WOOD', 'OILC', 'METL', 'MACH', 'TREQ', 'MANU', 'RECY', 'ELWA',
+        'CONS', 'REPA', 'WHOT', 'RETT', 'GAST', 'TRAN', 'COMM', 'FINC', 'ADMI', 'EDHE', 'HOUS', 'OTHE', 'REXI'
     ],
     'PRIVSECTORS': [
-        'AGRI',
-        'FISH',
-        'MINQ',
-        'FOOD',
-        'TEXL',
-        'WOOD',
-        'OILC',
-        'METL',
-        'MACH',
-        'TREQ',
-        'MANU',
-        'RECY',
-        'ELWA',
-        'CONS',
-        'REPA',
-        'WHOT',
-        'RETT',
-        'GAST',
-        'TRAN',
-        'COMM',
-        'FINC',
-        'ADMI',
-        'EDHE',
-        'HOUS',
-        'OTHE',
-        'REXI'
+        'AGRI', 'FISH', 'MINQ', 'FOOD', 'TEXL', 'WOOD', 'OILC', 'METL', 'MACH', 'TREQ', 'MANU', 'RECY', 'ELWA', 'CONS',
+        'REPA', 'WHOT', 'RETT', 'GAST', 'TRAN', 'COMM', 'FINC', 'ADMI', 'EDHE', 'HOUS', 'OTHE', 'REXI'
+    ],
+    'ALL_INDUSTRY': [
+        'AGRI', 'FISH', 'MINQ', 'FOOD', 'TEXL', 'WOOD', 'OILC', 'METL', 'MACH', 'TREQ', 'MANU', 'RECY', 'ELWA', 'CONS',
+        'REPA', 'WHOT', 'RETT', 'GAST', 'TRAN', 'COMM', 'FINC', 'ADMI', 'EDHE', 'HOUS', 'OTHE', 'REXI'
     ]
 }
 
 state_gdp_path = "~/repos/harvey_scaling/data/external/CAGDP2__ALL_AREAS_2001_2019.csv"
+
+cn_gadm_to_iso_code = {
+    'CN.BJ': 'CN.BJ',
+    'CN.TJ': 'CN.TJ',
+    'CN.HB': 'CN.HE',
+    'CN.SX': 'CN.SX',
+    'CN.NM': 'CN.NM',
+    'CN.LN': 'CN.LN',
+    'CN.JL': 'CN.JL',
+    'CN.HL': 'CN.HL',
+    'CN.SH': 'CN.SH',
+    'CN.JS': 'CN.JS',
+    'CN.ZJ': 'CN.ZJ',
+    'CN.AH': 'CN.AH',
+    'CN.FJ': 'CN.FJ',
+    'CN.JX': 'CN.JX',
+    'CN.SD': 'CN.SD',
+    'CN.HE': 'CN.HA',
+    'CN.HU': 'CN.HB',
+    'CN.HN': 'CN.HN',
+    'CN.GD': 'CN.GD',
+    'CN.GX': 'CN.GX',
+    'CN.HA': 'CN.HI',
+    'CN.CQ': 'CN.CQ',
+    'CN.SC': 'CN.SC',
+    'CN.GZ': 'CN.GZ',
+    'CN.YN': 'CN.YN',
+    'CN.XZ': 'CN.XZ',
+    'CN.SA': 'CN.SN',
+    'CN.GS': 'CN.GS',
+    'CN.QH': 'CN.QH',
+    'CN.NX': 'CN.NX',
+    'CN.XJ': 'CN.XJ'
+}
 
 
 def find_attribute_in_yaml(_yaml_root, _attribute_name):
@@ -344,8 +414,8 @@ def generate_dataframe(_data):
         print("Can only generate dataframe for aggregated datasets. Please make sure that the time dimension of the "
               "dataset has length 1.")
         return
-    index = pd.MultiIndex.from_product([_data.get_regions(), _data.get_sectors(), _data.get_lambda_axis(),
-                                        _data.get_duration_axis()])
+    index = pd.MultiIndex.from_product([_data.get_regions(), _data.get_sectors(), _data.get_re_axis(),
+                                        _data.get_dt_axis()])
     _df = pd.DataFrame(data=_data.get_data().reshape(len(_data.get_vars()), -1).transpose(), columns=_data.get_vars(),
                        index=index)
     return _df
@@ -518,7 +588,7 @@ def calc_mean_f0(_data, _year, _states, _inplace=False):
         res = _data
     else:
         res = copy.deepcopy(_data)
-    us_states_mapping = us.states.mapping('name', 'abbr')
+    us_states_mapping = {sd.name: sd.code.replace('US-', '') for sd in pc.subdivisions if sd.country_code=='US'}
     gdp_by_state = pd.read_csv(state_gdp_path)
     gdp_by_state.drop(gdp_by_state.index[-4:], inplace=True)
     gdp_by_state = gdp_by_state[gdp_by_state['Description'] == 'All industry total']
@@ -528,7 +598,7 @@ def calc_mean_f0(_data, _year, _states, _inplace=False):
     gdp_by_state = gdp_by_state[['GeoName', str(_year)]].astype({'GeoName': str, str(_year): int})
     gdp_by_state.set_index('GeoName', inplace=True)
     total_gdp = gdp_by_state[str(_year)].sum()
-    for (scaled_l, scaled_d) in list(itertools.product(_data.get_lambda_axis(), _data.get_duration_axis())):
+    for (scaled_l, scaled_d) in list(itertools.product(_data.get_re_axis(), _data.get_dt_axis())):
         exposed_gdp_scaled = 0
         for state in _states:
             state_f0 = _data.scaled_scenarios[(scaled_l, scaled_d)]['params'][state]['f_0']
@@ -550,8 +620,8 @@ def set_direct_loss_meta(_data, _inplace=False):
     print("Direct loss will be calculated for {} sectors and {} regions".format(len(_data.get_vars()),
                                                                                 len(_data.get_regions())))
     direct_loss = _data.get_vars('direct_loss').aggregate('sum')
-    for (scaled_l, scaled_d) in list(itertools.product(_data.get_lambda_axis(), _data.get_duration_axis())):
-        direct_loss_iter = direct_loss.get_lambdavals(scaled_l).get_durationvals(scaled_d).get_data().sum()
+    for (scaled_l, scaled_d) in list(itertools.product(_data.get_re_axis(), _data.get_dt_axis())):
+        direct_loss_iter = direct_loss.get_re(scaled_l).get_dt(scaled_d).get_data().sum()
         res.scaled_scenarios[(scaled_l, scaled_d)]['params']['all']['direct_loss'] = direct_loss_iter
     if not _inplace:
         return res
@@ -576,6 +646,7 @@ def calc_direct_production_loss(_data, _inplace=False):
             direct_loss = f * _data.get_vars('production').get_regions(affected_states)
     if not _inplace:
         return res
+
 
 
     # probably not needed anymore
