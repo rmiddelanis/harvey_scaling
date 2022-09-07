@@ -5,4 +5,4 @@
 /analysis/__pycache__
 **/.ipynb_checkpoints/**
 data/acclimate_output/**
-data/__pycache__
+/data/__pycache__/*
