@@ -2,8 +2,9 @@
 /data/external/*
 /data/forcing/*
 /sst_gmt_relationship/data/*
-/analysis/__pycache__
+**/__pycache__
 **/.ipynb_checkpoints/**
 data/acclimate_output/**
+data/acclimate_forcing/**
 /data/__pycache__/*
 disaggregation/own_implementation/output/*
