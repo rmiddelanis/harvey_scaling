@@ -6,3 +6,4 @@
 **/.ipynb_checkpoints/**
 data/acclimate_output/**
 /data/__pycache__/*
+disaggregation/own_implementation/output/*
