@@ -1,6 +1,4 @@
 /.idea/
-/data/forcing/*
-/sst_gmt_relationship/data/*
 **/__pycache__
 **/.ipynb_checkpoints/**
 data/acclimate_output/**
