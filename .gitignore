@@ -6,4 +6,4 @@
 data/acclimate_output/**
 data/acclimate_forcing/**
 /data/__pycache__/*
-disaggregation/own_implementation/output/*
+eora_disaggregation/Eora26-v199.82-2015-CHN-USA_naics_disagg.nc
