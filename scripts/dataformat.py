@@ -7,7 +7,8 @@ import xarray as xr
 
 sys.path.append('/home/robinmid/repos/hurricanes_hindcasting_remake/')
 sys.path.append('/home/robin/repos/hurricanes_hindcasting_remake/')
-from analysis.utils import get_index_list, detect_stationarity_and_offset_in_series, WORLD_REGIONS
+sys.path.append('/home/robin/repos/harvey_scaling/')
+from scripts.utils import get_index_list, detect_stationarity_and_offset_in_series, WORLD_REGIONS
 
 sys.path.append('/home/robin/repos/post-processing//')
 from acclimate.dataset import AcclimateOutput

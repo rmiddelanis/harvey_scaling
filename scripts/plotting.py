@@ -16,18 +16,18 @@ from acclimate.dataset import AcclimateOutput
 from matplotlib import transforms, ticker, patches
 from matplotlib import cm
 
-sys.path.append("../")
+sys.path.append("/home/robin/repos/harvey_scaling/")
 
 from scipy import stats
 from scipy.interpolate import griddata
 from netCDF4 import Dataset
 import xarray as xr
 
-from analysis.map import make_map, create_colormap
+from scripts.map import make_map, create_colormap
 
-from data.calc_initial_forcing_intensity_HARVEY import plot_polygon, load_hwm, alpha_shape, alpha
-from analysis.dataformat import AggrData, clean_regions
-from analysis.utils import WORLD_REGIONS, cn_gadm_to_iso_code, SECTOR_GROUPS
+from scripts.calc_initial_forcing_intensity_HARVEY import plot_polygon, load_hwm, alpha_shape, alpha
+from scripts.dataformat import AggrData, clean_regions
+from scripts.utils import WORLD_REGIONS, cn_gadm_to_iso_code, SECTOR_GROUPS
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.ndimage import gaussian_filter, zoom
 import matplotlib as mpl
@@ -194,7 +194,7 @@ def plot_radius_extension_map(_numbering=None, _outfile=None, _shape_outpath=Non
     plt.show()
 
 
-def plot_radius_extension_impact(_outfile=None, _numbering=None):
+def plot_radius_extension_impact(_outfile=None, _numbering=None, store_data=None):
     fig, ax = plt.subplots(figsize=(MAX_FIG_WIDTH_NARROW, 0.75 * MAX_FIG_WIDTH_NARROW))
     initial_forcing_intensities = json.load(
         open(os.path.join(rootdir, "data/generated/initial_forcing_params.json"), "rb"))
@@ -202,6 +202,8 @@ def plot_radius_extension_impact(_outfile=None, _numbering=None):
     for key in list(affected_counties.keys()):
         affected_counties[int(key)] = affected_counties.pop(key)
     re = [int(re) for re in affected_counties.keys()]
+    data_output = pd.DataFrame(columns=['TX', 'LA'], index=re)
+    data_output.index.name = 'delta_r'
     for _s in ['LA', 'TX']:
         m_f0_i = initial_forcing_intensities['params'][_s]['m']
         c_f0_i = initial_forcing_intensities['params'][_s]['c']
@@ -215,8 +217,9 @@ def plot_radius_extension_impact(_outfile=None, _numbering=None):
             va = 'top'
         ax.text(1, y_pos, "y={0:1.2f}".format(m_f0_i * 1e6) + r"$\cdot 10^{-3}$" + "x+{0:1.2f}".format(c_f0_i), ha='right', va=va,
                 transform=ax.transAxes)
-        # ax1.scatter(x, [initial_forcing_intensities['points'][re][_s] for re in radius_extensions], label=_s, s=6)
-        ax.scatter(re, [initial_forcing_intensities['points'][str(re)][_s] for re in re], label=_s, s=5)
+        f_vals = [initial_forcing_intensities['points'][str(re)][_s] for re in re]
+        ax.scatter(re, f_vals, label=_s, s=5)
+        data_output[_s] = f_vals
     ax.set_yticks([0.1 * i for i in range(6)])
     # ax1.set_yticklabels(np.arange(0, 0.55, 0.1))
     ax.legend(loc='upper left', bbox_to_anchor=(1, 1), frameon=False, borderpad=0., handletextpad=0.5, handlelength=1)
@@ -232,6 +235,8 @@ def plot_radius_extension_impact(_outfile=None, _numbering=None):
     plt.show()
     if isinstance(_outfile, str):
         fig.savefig(_outfile, dpi=300)
+    if store_data is not None:
+        data_output.to_csv(store_data)
 
 
 def prepare_heatmap_figure(_data: AggrData, _type: str, _x_ax: bool, gmt_anomaly_0=0, _xlabel=False,
@@ -280,13 +285,6 @@ def prepare_heatmap_figure(_data: AggrData, _type: str, _x_ax: bool, gmt_anomaly
     # ax.set_xticklabels(["{0:1.2f}".format(gmt_anomaly_0 + d / _sst_gmt_factor) for d in _data.get_dt_axis()])
     ax.set_xticks(np.arange(0, len(_data.get_dt_axis()), 1 / _data.dT_stepwidth * _sst_gmt_factor))
     ax.set_xticklabels(np.arange(0, (len(_data.get_dt_axis()) - 1) * _data.dT_stepwidth / _sst_gmt_factor + 1e-10).astype(int))
-    # ax.set_xticklabels([t * _data.dT_stepwidth / _sst_gmt_factor if float(t * _data.dT_stepwidth / _sst_gmt_factor).is_integer() else '' for t in ax.get_xticks()])
-    # ax.tick_params(axis='x', labelrotation=90)
-    # else:
-    #     ax.set_xlabel('')
-    #     ax.set_xticklabels([])
-    #     # ax.set_xlim(0, len(_data.get_dt_axis()) - 0.5)
-    #     ax.set_xticks(np.arange(0, len(_data.get_dt_axis()), 1))
     if _numbering is not None:
         transform = transforms.blended_transform_factory(fig.transFigure, ax.transAxes)
         fig.text(0, 1, _numbering, ha='left', va='center', fontweight='bold', transform=transform)
@@ -296,7 +294,7 @@ def prepare_heatmap_figure(_data: AggrData, _type: str, _x_ax: bool, gmt_anomaly
 def make_heatmap(_data: AggrData, _gauss_filter=False,
                  _gauss_sigma=1, _gauss_truncate=1, _outfile=None, _slopes=None, _ylabel=None, _xlabel=None,
                  _sst_gmt_factor=0.5, _data_division=1.0, _numbering=None, _vmin=None, _vmax=None, _slope_data=None,
-                 _y_ax_precision=3):
+                 _y_ax_precision=3, store_data=None):
     if _data.shape[:3] != (1, 1, 1) or _data.shape[-1] != 1 or (
             _slope_data is not None and (_slope_data.shape[:3] != (1, 1, 1) or _slope_data.shape[-1] != 1)):
         raise ValueError("All dimensions of the datasets except lambda and duration.")
@@ -316,8 +314,6 @@ def make_heatmap(_data: AggrData, _gauss_filter=False,
     if _slope_data is not None and _vmax is None:
         _vmax = max(_data.data.max(), _slope_data.data.max())
     norm = mpl.colors.Normalize(vmin=_vmin, vmax=_vmax)
-    # cmap = cm.get_cmap('viridis')
-    # cmap = cm.get_cmap('Oranges_r')
     cmap = cm.get_cmap('Oranges')
     im = ax.imshow(plot_data, origin='lower', aspect='auto', norm=norm, cmap=cmap)
     cbar = fig.colorbar(im, cax=cbar_ax, orientation='vertical')
@@ -344,8 +340,6 @@ def make_heatmap(_data: AggrData, _gauss_filter=False,
             ax.plot([base_x, x_max], [m * base_x + b, y_max], c='w')
             ax.text(base_x + (x_max - base_x) / 1.5, m * (base_x + (x_max - base_x) / 1.5) + b, string.ascii_uppercase[idx],
                     c='w', va='bottom', ha='right')
-    # ax.plot(base_x, base_y, marker='x', markersize=8, color='w')
-    # ax.text(base_x, base_y, '\n({0:1.3f})'.format(base_z), color='k', fontsize=FSIZE_SMALL, ha='center', va='top')
     if _slope_data is not None:
         binstep_re = abs(_slope_data.get_re()[1] - _slope_data.get_re()[0])
         binstep_dT = abs(_slope_data.get_dt()[1] - _slope_data.get_dt()[0])
@@ -403,12 +397,28 @@ def make_heatmap(_data: AggrData, _gauss_filter=False,
     ax.text(0.5, 0.98, sector_name, transform=transform, ha='center', va='top', fontsize=FSIZE_MEDIUM)
     if _outfile is not None:
         plt.savefig(_outfile, dpi=300)
+    if store_data is not None:
+        store_slope_data = pd.DataFrame(
+            data=_slope_data.data.reshape((21, 15)),
+            index=_slope_data.get_re(),
+            columns=np.round(_slope_data.get_dt() / _sst_gmt_factor, 2)
+        ).unstack().dropna()
+        store_main_data = pd.DataFrame(
+            data=plot_data,
+            index=_data_aggregated.get_re(),
+            columns=np.round(_data_aggregated.get_dt() / _sst_gmt_factor, 2)
+        ).unstack()
+        pd.concat([
+            store_slope_data,
+            store_main_data.drop(np.intersect1d(store_slope_data.index, store_main_data.index))
+        ]).reset_index().rename({'level_0': 'delta_t', 'level_1': 'delta_r', 0: 'value'}, axis=1).to_csv(store_data)
     plt.show(block=False)
 
 
 def make_heatmap_cut(_data: AggrData, _slopes=None, _outfile=None, _gauss_filter=True, _gauss_sigma=1,
                      _gauss_truncate=1, _plot_xax=True, _ylabel=None, _xlabel=None, _sst_gmt_factor=0.5,
-                     _duration_0=0, _numbering=None, _slope_data=None, _y_ax_precision=3, _legend=True):
+                     _duration_0=0, _numbering=None, _slope_data=None, _y_ax_precision=3, _legend=True,
+                     store_data=None):
     if _data.shape[:3] != (1, 1, 1) or _data.shape[-1] != 1 or (
             _slope_data is not None and (_slope_data.shape[:3] != (1, 1, 1) or _slope_data.shape[-1] != 1)):
         raise ValueError("All dimensions of the datasets except lambda and duration.")
@@ -432,7 +442,6 @@ def make_heatmap_cut(_data: AggrData, _slopes=None, _outfile=None, _gauss_filter
             durations = durations[:len(lambdas)]
             z = [interp(lambdas[i], durations[i])[0, 0] for i in range(len(durations))]
             ax.plot(np.arange(len(durations)) + x_offset, z, label=string.ascii_uppercase[idx], linewidth=0.5)
-            # label=string.ascii_uppercase[idx] + ": {0:1.0f} km / $\degree C$".format(_slopes[idx] / 1e3))
     else:
         datastep_re = abs(_data.get_re()[1] - _data.get_re()[0])
         datastep_dT = abs(_data.get_dt()[1] - _data.get_dt()[0])
@@ -444,8 +453,6 @@ def make_heatmap_cut(_data: AggrData, _slopes=None, _outfile=None, _gauss_filter
             yerrors = slope_datapoints[slope]['yerrors']
             x_vals = slope_datapoints[slope]['x_vals']
             x_vals = [x / datastep_dT - 2. * datastep_dT * (num_slopes / 2 - 0.5 - idx) for x in x_vals]
-            # ax.errorbar(x_vals, mean_vals, yerr=yerrors, fmt='o', label=string.ascii_uppercase[idx], linewidth=1,
-            #             markersize=3, color='k', alpha=(1 - 0.2 * idx), marker=marker)#, capsize=1)
             ax.errorbar(x_vals, mean_vals, yerr=yerrors, fmt='o', label=string.ascii_uppercase[idx], linewidth=1,
                         markersize=3, color=REGION_COLORS(idx))  # , capsize=1)
     if _ylabel is not None:
@@ -458,6 +465,20 @@ def make_heatmap_cut(_data: AggrData, _slopes=None, _outfile=None, _gauss_filter
         ax.legend(frameon=False)
     if _outfile is not None:
         plt.savefig(_outfile, dpi=300)
+    if store_data is not None:
+        data_output = pd.DataFrame(
+            columns=['scenario', 'delta_t', 'min', 'mean', 'max']
+        )
+        for scenario, (_, scenario_data) in enumerate(slope_datapoints.items()):
+            for idx, delta_t in enumerate(scenario_data['x_vals']):
+                data_output.loc[len(data_output)] = [
+                    string.ascii_uppercase[scenario],
+                    int(delta_t / _sst_gmt_factor),
+                    scenario_data['mean_vals'][idx] - scenario_data['yerrors'][0][idx],
+                    scenario_data['mean_vals'][idx],
+                    scenario_data['mean_vals'][idx] + scenario_data['yerrors'][1][idx]
+                ]
+        data_output.to_csv(store_data)
     plt.show()
 
 
@@ -702,14 +723,10 @@ def make_scatter_plot(_data: AggrData, _clip=365, _x_dim='direct_loss', _y_dim='
                       _xlabels=True, _ylabels=True):
     if _data.get_sim_duration() != 1:
         raise ValueError('Must pass data with only one timestep')
-    # if len(_data.get_vars()) != 1:
-    #     raise ValueError('Must pass data with only one variable')
     if len(_data.get_regions()) != 1:
         raise ValueError('Must pass data with only one region')
     if len(_data.get_sectors()) != 1:
         raise ValueError('Must pass data with only one sector')
-    # if _x_dim != 'var' and _y_dim != 'var' and _z_dim != 'var':
-    #     raise ValueError('One dimension must be the data variable.')
     if _x_dim == _y_dim or _y_dim == _z_dim or _z_dim == _x_dim:
         raise ValueError('all dimensions must be different.')
     figsize = (MAX_FIG_WIDTH_NARROW, 0.9 * MAX_FIG_WIDTH_NARROW)
@@ -922,13 +939,12 @@ def make_agent_var_global_map(_data, _sector='MINQ', _variable='incoming_demand'
         fig.text(0, min(ax.get_position().y1, 0.98), _numbering, fontweight='bold', ha='left', va='center')
     if _outfile is not None:
         plt.savefig(_outfile, dpi=300)
-    return pd.DataFrame(data_array, _data.get_regions())
+    return pd.Series(data_array, _data.get_regions(), name='value')
 
 
 def generate_flow_dataset(_t0=4, _t_agg=365, _sector='MINQ'):
     data_dir = "/home/robin/repos/harvey_scaling/data/acclimate_output/HARVEY_econYear2015_dT_0_2.5_0.125__re0_100000.0_5000.0__ccFactor1.07/2021-08-11__flow_output/"
     in_data = Dataset(data_dir + "HARVEY_dT0.00_re0_output_with_flows.nc")
-    # in_data = Dataset(data_dir + "HARVEY_dT0.00_re0_sent_flow.nc")
     regions = in_data['region'][:]
     sectors = in_data['sector'][:]
     var_arrays = []
@@ -965,7 +981,7 @@ def generate_flow_dataset(_t0=4, _t_agg=365, _sector='MINQ'):
 
 def make_flow_var_global_map(_sector='MINQ', _variable='demand_request', _exclude_regions=None, _t_0=4,
                              _t_agg=365, _cbar_lims=None, _numbering=None, _outfile=None):
-    data_dir = "/home/robin/repos/harvey_scaling/data/acclimate_output/HARVEY_econYear2015_dT_0_2.5_0.125__re0_100000.0_5000.0__ccFactor1.07/2021-08-11__flow_output/"
+    data_dir = "/home/robin/repos/harvey_scaling/data/acclimate_output/main_analysis/HARVEY_econYear2015_dT_0_2.5_0.125__re0_100000.0_5000.0__ccFactor1.07/2021-08-11__flow_output/"
     if os.path.exists(data_dir + "{}_anomalies_{}.pk".format(_variable, _sector)):
         data_anomalies = pickle.load(open(data_dir + "{}_anomalies_{}.pk".format(_variable, _sector), 'rb'))
         regions = [i[0] for i in data_anomalies]
@@ -991,11 +1007,6 @@ def make_flow_var_global_map(_sector='MINQ', _variable='demand_request', _exclud
                                      non_domestic_flow.sum() - (non_domestic_flow[0] * len(non_domestic_flow))]
         pickle.dump(list(zip(regions, data_anomalies)),
                     open(data_dir + "{}_anomalies_{}.pk".format(_variable, _sector), 'wb'))
-    # dataset[dataset < 0] = dataset[dataset < 0] / abs(sum(dataset[dataset < 0]))
-    # dataset[dataset >= 0] = dataset[dataset >= 0] / abs(sum(dataset[dataset >= 0]))
-    # for r, d in sorted(list(zip(regions, dataset)), key=lambda x: x[1]):
-    #     print(r, '{0:1.3f}'.format(d))
-    #
     cm = create_colormap(
         'custom',
         ['red', "white", 'blue'],
@@ -1006,12 +1017,6 @@ def make_flow_var_global_map(_sector='MINQ', _variable='demand_request', _exclud
     ax = fig.add_subplot(gs[0, 0])
     cax = fig.add_subplot(gs[0, 1])
     patchespickle_file = "/home/robin/repos/hurricanes_hindcasting_remake/global_map/map_robinson_0.1simplified.pkl.gz"
-    # if _variable == 'incoming_demand':
-    #     ylabel = 'incoming demand anomaly (relative to total change)'
-    # elif _variable == 'production':
-    #     ylabel = 'production anomaly (relative to total change)'
-    # elif _variable == 'demand':
-    #     ylabel = 'demand anomaly (relative to total change)'
     make_map(patchespickle_file=patchespickle_file,
              regions=regions,
              data=data_anomalies,
@@ -1032,8 +1037,6 @@ def make_flow_var_global_map(_sector='MINQ', _variable='demand_request', _exclud
              show_cbar=True,
              )
     plt.tight_layout()
-    # if _outfile is not None:
-    #     plt.savefig(_outfile, dpi=300)
 
 
 def plot_gains_and_losses(_data: AggrData, _slopes=None, _region_group=None, _gauss_filter=False, _gauss_sigma=1,
@@ -1080,8 +1083,6 @@ def plot_gains_and_losses(_data: AggrData, _slopes=None, _region_group=None, _ga
     ax2.spines['top'].set_position(('data', 0))
     ax2.tick_params('x', direction='inout', pad=-12)
     ax2.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-    # ax2.set_yticklabels([abs(t) for t in ax.get_yticks()])
-    # ax2.set_xticks(np.arange(0, _data.get_dt_axis().max() / _sst_gmt_factor + 0.1, 0.5))
     ax2.set_xticklabels([])
     dT_sst_list = _data.get_dt_axis()
     for idx, slope in enumerate(_slopes):
@@ -1096,8 +1097,6 @@ def plot_gains_and_losses(_data: AggrData, _slopes=None, _region_group=None, _ga
         dT_gmt_list = dT_gmt_list[:len(re_list)]
         ax.fill_between(dT_gmt_list, global_gains, color='orange', alpha=0.1, linewidth=0)
         ax.fill_between(dT_gmt_list, global_losses, color='purple', alpha=0.1, linewidth=0)
-        # ax.plot(dT_gmt_list, global_gains, color='orange', alpha=(1 - 0.2 * idx))
-        # ax.plot(dT_gmt_list, global_losses, color='purple', alpha=(1 - 0.2 * idx))
         ax.plot(dT_gmt_list, global_gains + global_losses, color='k', alpha=(1 - 0.5 * idx**0.4),
                 label=string.ascii_uppercase[idx])
         print(global_gains / global_losses)
@@ -1128,13 +1127,12 @@ def plot_gains_and_losses(_data: AggrData, _slopes=None, _region_group=None, _ga
 
 def plot_compensation_gap(_data: AggrData, region, _t0=4, _t_agg=365, _sst_gmt_factor=0.5, _legend=True,
                           _numbering=None, _xlabel=True, _ylabel=True, _outfile=None, _inplot_region_info=False,
-                          _sector_label=True, _remove_upper_tick=False, _ax_right=False):
+                          _sector_label=True, _remove_upper_tick=False, _ax_right=False, store_data=None):
     if (_data.shape[0], _data.shape[2]) != (1, 1):
         raise ValueError('Can only pass data with one variable and sector.')
     if _data.slope_meta is None:
         raise ValueError('Must pass slope ensemble dataset.')
     _data = _data.get_regions(WORLD_REGIONS['WORLD']).clip(_t0, _t0 + _t_agg).aggregate('absolute_difference')
-    # clean_regions(_data)
     _data_gains = copy.deepcopy(_data)
     _data_losses = copy.deepcopy(_data)
     _data_gains.data_capsule.data[_data.data < 0] = 0
@@ -1144,7 +1142,6 @@ def plot_compensation_gap(_data: AggrData, region, _t0=4, _t_agg=365, _sst_gmt_f
     clean_regions(_data_gains)
     clean_regions(_data_losses)
     _data = _data_gains
-    # _data.data_capsule.data = (_data_gains.data / _data_losses.data - 1) * 100
     _data.data_capsule.data = (_data_gains.data / _data_losses.data) * 100
     fig_width = MAX_FIG_WIDTH_NARROW
     fig_height = MAX_FIG_WIDTH_NARROW
@@ -1154,8 +1151,6 @@ def plot_compensation_gap(_data: AggrData, region, _t0=4, _t_agg=365, _sst_gmt_f
     if _sector_label:
         y_scale += 0.02
     x_scale = 1
-    # if not _ylabel:
-    #     x_scale -= 0.02
     fig, ax = plt.subplots(figsize=(fig_width * x_scale, fig_height * y_scale))
     ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
     ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
@@ -1171,16 +1166,25 @@ def plot_compensation_gap(_data: AggrData, region, _t0=4, _t_agg=365, _sst_gmt_f
     num_slopes = len(_data.slope_meta)
     x_stepwidth = (list(_data.slope_meta[0].keys())[0][0] - list(_data.slope_meta[0].keys())[1][0]) / _sst_gmt_factor
     slope_markers = ['s', 'o', '<', '>', 'x', 'D']
+    output_data = pd.DataFrame(
+        columns=['min', 'mean', 'max'],
+        index=pd.MultiIndex(levels=[[], []], codes=[[], []], names=[u'scenario', u'delta_t'])
+    )
     for (idx, slope), marker in zip(enumerate(sorted(list(_data.slope_meta.keys()), reverse=False)), slope_markers[:num_slopes]):
         datapoints = get_slope_means_and_errors(_data.get_regions(region))
         mean_vals = datapoints[slope]['mean_vals']
         yerrors = datapoints[slope]['yerrors']
         x_vals = datapoints[slope]['x_vals'] / _sst_gmt_factor
-        x_vals = [x + x_stepwidth / (2.5 * num_slopes) * (num_slopes / 2 - 0.5 - idx) for x in x_vals]
-        # ax.errorbar(x_vals, mean_vals, yerr=yerrors, fmt='o', label=string.ascii_uppercase[idx],
-        #             linewidth=0.5, marker=marker, markersize=3, color='k', alpha=(1 - 0.2 * idx))
-        ax.errorbar(x_vals, mean_vals, yerr=yerrors, fmt='o', label=string.ascii_uppercase[idx],
+        plot_x_vals = [x + x_stepwidth / (2.5 * num_slopes) * (num_slopes / 2 - 0.5 - idx) for x in x_vals]
+        ax.errorbar(plot_x_vals, mean_vals, yerr=yerrors, fmt='o', label=string.ascii_uppercase[idx],
                     linewidth=1, markersize=3, color=REGION_COLORS(idx))
+        for t_idx, delta_t in enumerate(x_vals):
+            index = (string.ascii_uppercase[idx], int(delta_t))
+            output_data.loc[index, :] = [
+                mean_vals[t_idx] - yerrors[0][t_idx],
+                mean_vals[t_idx],
+                mean_vals[t_idx] + yerrors[1][t_idx]
+            ]
     if _legend:
         plt.legend(frameon=False)
     if _inplot_region_info:
@@ -1205,8 +1209,6 @@ def plot_compensation_gap(_data: AggrData, region, _t0=4, _t_agg=365, _sst_gmt_f
             region_name = 'Global'
         fig.text(0, 0.5 / y_scale, '{} CLR'.format(region_name), rotation=90, ha='left',
                  va='center', transform=trans, fontsize=FSIZE_MEDIUM)
-    # if not _xlabel:
-    #     ax.set_xticklabels([])
     if _remove_upper_tick:
         ax.set_yticks(ax.get_yticks()[:-2])
     if _sector_label:
@@ -1222,6 +1224,8 @@ def plot_compensation_gap(_data: AggrData, region, _t0=4, _t_agg=365, _sst_gmt_f
         fig.text(0.05 if not _ax_right else 0, 1, _numbering, fontweight='bold', ha='left', va='top', transform=trans)
     if _outfile is not None:
         plt.savefig(_outfile, dpi=300)
+    if store_data is not None:
+        output_data.to_csv(store_data)
 
 
 def plot_global_gain_shares(_data: AggrData, _region_groups, _slopes=None, _gauss_filter=None, _gauss_sigma=1,
@@ -1240,7 +1244,6 @@ def plot_global_gain_shares(_data: AggrData, _region_groups, _slopes=None, _gaus
         if region_name == 'WORLD':
             subregions = list(set(subregions) - set(WORLD_REGIONS.keys()))
         data_gains = _data.get_regions(subregions).data
-        # data_gains = data_gains.reshape((len(subregions), len(_data.get_re()), len(_data.get_dt_axis())))
         data_gains = data_gains[0, :, 0, :, :, 0]
         data_gains[data_gains < 0] = 0
         data_gains = data_gains.sum(axis=0)
@@ -1276,7 +1279,8 @@ def plot_global_shares_from_slope_dataset(_data: AggrData, _region_groups, _sst_
                                           _numbering=None, _relative=True, _t0=4, _t_agg=365,
                                           _ylim=None, _ylabel=True, _xlabel=True, _ax_right=False, _bar_reg_label=True,
                                           _inplot_legend=True, _inplot_sector_label=True,
-                                          _minor_ytick_loc=None, _major_ytick_loc=None, _plot_regression=None):
+                                          _minor_ytick_loc=None, _major_ytick_loc=None, _plot_regression=None,
+                                          store_data=None):
     if (_data.shape[0], _data.shape[2]) != (1, 1):
         raise ValueError('Can only pass data with one variable and sector.')
     if type(_region_groups) == str:
@@ -1306,8 +1310,6 @@ def plot_global_shares_from_slope_dataset(_data: AggrData, _region_groups, _sst_
     num_slopes = len(_data.slope_meta.keys())
     num_regions = len(_region_groups)
     bar_width = 1
-    # ax.xaxis.set_ticks_position('inout')
-    # ax.tick_params('x', pad=3, length=2)#, direction='inout')
     minor_xtick_positions = np.array([])
     minor_xtick_labels = np.array([])
     major_xtick_positions = []
@@ -1315,7 +1317,10 @@ def plot_global_shares_from_slope_dataset(_data: AggrData, _region_groups, _sst_
         ax.yaxis.set_minor_locator(ticker.MultipleLocator(_minor_ytick_loc))
     if _major_ytick_loc is not None:
         ax.yaxis.set_major_locator(ticker.MultipleLocator(_major_ytick_loc))
-    # ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%d'))
+    output_data = pd.DataFrame(
+        columns=['min', 'mean', 'max'],
+        index=pd.MultiIndex(levels=[[], [], []], codes=[[], [], []], names=[u'scenario', u'delta_t', u'region_group'])
+    )
     for slope_idx, slope in enumerate(sorted(list(_data.slope_meta.keys()), reverse=False)):
         pre_mean_vals = None
         for region_idx, region_group in enumerate(_region_groups):
@@ -1360,6 +1365,13 @@ def plot_global_shares_from_slope_dataset(_data: AggrData, _region_groups, _sst_
                     ax.text(x + rectangle_width / 2, y - 0.01, string.ascii_uppercase[slope_idx], ha='center', va='top',
                             transform=ax.transAxes)
             pre_mean_vals = mean_vals
+            for idx, delta_t in enumerate(x_vals):
+                index = (string.ascii_uppercase[slope_idx], int(delta_t), region_group)
+                output_data.loc[index, :] = [
+                    mean_vals[idx] - yerrors[0][idx],
+                    mean_vals[idx],
+                    mean_vals[idx] + yerrors[1][idx]
+                ]
     if _inplot_sector_label:
         sector_name = list(_data.get_sectors().keys())[0]
         if sector_name in ['PRIVSECTORS-MINQ', 'ALL_INDUSTRY-MINQ']:
@@ -1381,28 +1393,25 @@ def plot_global_shares_from_slope_dataset(_data: AggrData, _region_groups, _sst_
         transform = transforms.blended_transform_factory(ax.transAxes, fig.transFigure)
         fig.text(0.5, 0, r'$\Delta T$ (temperature change in °C)', ha='center', va='bottom', transform=transform,
                  fontsize=FSIZE_MEDIUM)
-        # transform = transforms.blended_transform_factory(ax.transData, fig.transFigure)
-        # for pos, slope_label in zip(major_xtick_positions, string.ascii_uppercase[:num_slopes]):
-        #     fig.text(pos, 0.045, slope_label, ha='center', va='bottom', transform=transform)
     else:
         ax.set_xticklabels([])
     if _ylim is not None:
         ax.set_ylim(_ylim)
     if _numbering is not None:
         transform = transforms.blended_transform_factory(fig.transFigure, ax.transAxes)
-        # x_pos = 0
-        # if not _ylabel:
-        #     x_pos = 0.05
         fig.text(0.05 if not _ax_right else 0, 1, _numbering, ha='left', va='top', fontweight='bold', transform=transform)
     if _outfile is not None:
         plt.savefig(_outfile, dpi=300)
+    if store_data is not None:
+        output_data.to_csv(store_data)
     return _data
 
 
 def plot_gains_and_losses_from_slope_dataset(_slope_data: AggrData, _region_group, _data: AggrData = None, _sst_gmt_factor=0.5, _outfile=None,
                                              _numbering=None, _relative=True, _t0=4, _t_agg=365, _ax_right=False,
                                              _ylim=None, _ylabel=True, _xlabel=True, _sector_label=False,
-                                             _upper_slope_labels=False, _minor_ytick_loc=None, _major_ytick_loc=None):
+                                             _upper_slope_labels=False, _minor_ytick_loc=None, _major_ytick_loc=None,
+                                             store_data=None):
     if (_slope_data.shape[0], _slope_data.shape[2]) != (1, 1):
         raise ValueError('Can only pass data with one variable and sector.')
     if _data is not None and (_data.shape[0], _data.shape[2]) != (1, 1):
@@ -1436,7 +1445,6 @@ def plot_gains_and_losses_from_slope_dataset(_slope_data: AggrData, _region_grou
     ax.set_position([ax_x0, ax_y0, ax_width, ax_height])
     num_slopes = len(_slope_data.slope_meta.keys())
     bar_width = 1
-    # ax.tick_params('x', pad=3, length=2)#, direction='inout')
     if _ax_right:
         ax.yaxis.tick_right()
     xtick_positions = np.array([])
@@ -1449,13 +1457,17 @@ def plot_gains_and_losses_from_slope_dataset(_slope_data: AggrData, _region_grou
     ax2 = ax.twiny()
     ax2.set_position([ax_x0, ax_y0, ax_width, ax_height])
     ax2.spines['top'].set_position(('data', 0))
-    # ax2.tick_params('x', direction='inout', pad=-12)
     ax2.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-    # ax2.set_yticklabels([abs(t) for t in ax.get_yticks()])
-    # ax2.set_xticks(np.arange(0, _data.get_dt_axis().max() / _sst_gmt_factor + 0.1, 0.5))
     ax2.set_xticklabels([])
+    output_data = pd.DataFrame(
+        columns=['gains_min', 'gains_mean', 'gains_max', 'losses_min', 'losses_mean', 'losses_max', 'sum_min',
+                 'sum_mean', 'sum_max'],
+        index=pd.MultiIndex(levels=[[], []], codes=[[], []], names=[u'scenario', u'delta_t'])
+    )
     for slope_idx, slope in enumerate(sorted(list(_slope_data.slope_meta.keys()), reverse=False)):
-        for dataset, color in zip([slopedata_gains, slopedata_losses, _slope_data], ['orange', 'purple', 'dimgrey']):
+        for dataset, color, col_name in zip([slopedata_gains, slopedata_losses, _slope_data],
+                                            ['orange', 'purple', 'dimgrey'],
+                                            ['gains', 'losses', 'sum']):
             slope_datapoints = get_slope_means_and_errors(dataset.get_regions(_region_group))
             mean_vals = slope_datapoints[slope]['mean_vals']
             yerrors = slope_datapoints[slope]['yerrors']
@@ -1468,6 +1480,13 @@ def plot_gains_and_losses_from_slope_dataset(_slope_data: AggrData, _region_grou
             ax.bar(x_positions, mean_vals, width=bar_width, label=slope, align='center', color=color, alpha=0.5, zorder=1)
             ax.bar(x_positions, mean_vals, width=0, yerr=yerrors, label=slope, align='center', color='none',
                    alpha=0.5, zorder=3)
+            for idx, delta_t in enumerate(x_vals):
+                index = (string.ascii_uppercase[slope_idx], np.round(delta_t, 2))
+                output_data.loc[index, [f"{col_name}_min", f"{col_name}_mean", f"{col_name}_max"]] = [
+                    mean_vals[idx] - yerrors[0][idx],
+                    mean_vals[idx],
+                    mean_vals[idx] + yerrors[1][idx],
+                ]
         if _data is not None:
             subregions = [r for r in list(set(WORLD_REGIONS[_region_group]) - set(WORLD_REGIONS.keys())) if r in _data.get_regions()]
             data_array = _data.get_regions(subregions).data
@@ -1483,11 +1502,15 @@ def plot_gains_and_losses_from_slope_dataset(_slope_data: AggrData, _region_grou
             dT_gmt_list = dT_sst_list / _sst_gmt_factor
             re_list = dT_sst_list * slope
             re_list = re_list[re_list <= _data.get_re_axis()[-1]]
-            for dataset, color in zip([data_gains, data_losses, data_sum], ['orange', 'purple', 'dimgrey']):
+            for dataset, color, col_name in zip([data_gains, data_losses, data_sum], ['orange', 'purple', 'dimgrey'],
+                                                ['gains', 'losses', 'sum']):
                 interp = RectBivariateSpline(_data.get_re_axis(), _data.get_dt_axis(), dataset, s=0)
                 plot_data = np.array([interp(re_list[i], dT_sst_list[i])[0, 0] for i in range(len(re_list))])
                 dT_gmt_list = dT_gmt_list[:len(re_list)]
                 ax.plot(dT_gmt_list + (max(dT_gmt_list) + 1.5) * slope_idx, plot_data, color=color, alpha=1, zorder=2)
+                for idx, delta_t in enumerate(dT_gmt_list):
+                    index = (string.ascii_uppercase[slope_idx], np.round(delta_t, 2))
+                    output_data.loc[index, f"{col_name}_mean"] = plot_data[idx]
     if _sector_label:
         sector_name = list(_slope_data.get_sectors().keys())[0]
         if sector_name in ['PRIVSECTORS-MINQ', 'ALL_INDUSTRY-MINQ']:
@@ -1521,6 +1544,8 @@ def plot_gains_and_losses_from_slope_dataset(_slope_data: AggrData, _region_grou
                  transform=transform)
     if _outfile is not None:
         plt.savefig(_outfile, dpi=300)
+    if store_data is not None:
+        output_data.to_csv(store_data)
 
 
 def plot_sector_gain_shares(_data: AggrData, _regions, _sector, _slopes=None, _gauss_filter=None, _gauss_sigma=1,
@@ -1584,69 +1609,6 @@ def calc_stats(_data: AggrData, _sector='MINQ', _variable='production', _exclude
         stats.loc[r] = [region_gains + region_loss, region_gains, region_loss, region_gains / total_gains,
                         region_loss / total_loss]
     return stats
-
-
-def calc_sector_export(_sectors='MINQ', _aggregate_chn_usa=True, _exclude_domestic_trade=True,
-                       _baseline_path="/mnt/cluster_p/projects/acclimate/data/eora/Eora26-v199.82-2015-CHN-USA_naics_disagg.nc"):
-    baseline_data = Dataset(_baseline_path)
-    if type(_sectors) == str:
-        _sectors = [_sectors]
-    elif _sectors is None:
-        _sectors = baseline_data['sector'][:]
-    flows = baseline_data['flows'][:]
-    exports = pd.DataFrame(columns=['export'])
-    sec_indices = np.where(np.isin(baseline_data['sector'][:], _sectors))[0]
-    for r in tqdm.tqdm(baseline_data['region'][:]):
-        region_idx = np.where(baseline_data['region'][:] == r)[0][0]
-        rs_from = np.where((baseline_data['index_region'][:] == region_idx) & (np.isin(baseline_data['index_sector'], sec_indices)))[0]
-        excluded_region_indices = [region_idx]
-        if _exclude_domestic_trade:
-            if r[:3] == 'US.':
-                excluded_region_indices = np.where(np.isin(baseline_data['region'], WORLD_REGIONS['USA']))[0]
-            elif r[:3] == 'CN.':
-                excluded_region_indices = np.where(np.isin(baseline_data['region'], WORLD_REGIONS['CHN']))[0]
-        rs_to = np.where(~np.isin(baseline_data['index_region'][:], excluded_region_indices))[0]
-        exports.loc[r] = np.ma.filled(flows[rs_from, :][:, rs_to], 0).sum()
-    if _aggregate_chn_usa:
-        for r in ['USA', 'CHN']:
-            region_idx = np.where(np.isin(baseline_data['region'][:], WORLD_REGIONS[r]))[0]
-            rs_from = np.where(np.isin(baseline_data['index_region'][:], region_idx) & (np.isin(baseline_data['index_sector'], sec_indices)))[0]
-            rs_to = np.where(~np.isin(baseline_data['index_region'][:], region_idx))[0]
-            exports.loc[r] = np.ma.filled(flows[rs_from, :][:, rs_to], 0).sum()
-        exports = exports.loc[[i for i in exports.index if i[:3] not in ['CN.', 'US.']]]
-    exports['share'] = exports['export'] / exports['export'].sum()
-    exports = exports.sort_values(by='export', ascending=False)
-    exports['cum_share'] = 0
-    for i in range(len(exports)):
-        exports.loc[exports.index[i], 'cum_share'] = exports.iloc[:i + 1]['share'].sum()
-    return exports
-
-
-def calc_trade_with_region(_regions=None, _sectors=None, _exclude_regions=None,
-                           _baseline_path="/mnt/cluster_p/projects/acclimate/data/eora/Eora26-v199.82-2015-CHN-USA_naics_disagg.nc"):
-    baseline_data = Dataset(_baseline_path)
-    flows = baseline_data['flows'][:]
-    res = pd.DataFrame(columns=['import', 'export', 'total'])
-    target_region_indices = np.where(np.isin(baseline_data['region'][:], _regions))[0]
-    if _sectors is None:
-        _sectors = baseline_data['sector'][:]
-    target_sector_indices = np.where(np.isin(baseline_data['sector'][:], _sectors))[0]
-    target_rs_indices = np.where((np.isin(baseline_data['index_region'], target_region_indices)) & (np.isin(baseline_data['index_sector'], target_sector_indices)))[0]
-    for r in tqdm.tqdm(baseline_data['region'][:]):
-        if r not in _regions and r not in _exclude_regions:
-            r_idx = np.where(baseline_data['region'][:] == r)[0][0]
-            rs_indices = np.where((baseline_data['index_region'] == r_idx) & (np.isin(baseline_data['index_sector'], target_sector_indices)))[0]
-            imp = np.ma.filled(flows[target_rs_indices, :][:, rs_indices], 0).sum()
-            exp = np.ma.filled(flows[rs_indices, :][:, target_rs_indices], 0).sum()
-            total = imp + exp
-            res.loc[r] = [imp, exp, total]
-    for col in ['import', 'export', 'total']:
-        res[col + '_share'] = res[col] / res[col].sum()
-    res = res.sort_values(by='total_share', ascending=False)
-    res['cum_total_share'] = 0
-    for i in range(len(res)):
-        res.loc[res.index[i], 'cum_total_share'] = res.iloc[:i + 1]['total_share'].sum()
-    return res
 
 
 def make_receipt_output(_data: AggrData, _slope_data: AggrData, _sst_gmt_ratio=0.5, _pdf_output=False):
@@ -1751,22 +1713,23 @@ def sst_gmt_relationship(sea, hurricane_months_only=True, regression=True, month
         plt.savefig(outfile, dpi=300)
 
 
-def plot_sensitivity_analysis(path, name=None):
+def plot_sensitivity_analysis(path, name=None, store_data=None, fig_numbers=None):
     t_max = 365
     data = {}
     abs_gains_and_losses = {}
     rel_gains_and_losses = {}
-    for folder in os.listdir(path):
+    for folder in tqdm.tqdm(list(os.listdir(path))):
         directory = os.path.join(path, folder)
         if os.path.isdir(directory):
             data[folder] = {}
             abs_gains_and_losses[folder] = {}
             rel_gains_and_losses[folder] = {}
-            for subfolder in list(os.listdir(directory))[:]:
+            for subfolder in tqdm.tqdm(list(os.listdir(directory))[:]):
                 subdir = os.path.join(directory, subfolder)
                 if os.path.isdir(subdir):
                     parameter = float(subfolder)
-                    acc_output = AcclimateOutput(os.path.join(subdir, 'output.nc'), old_output_format=True)
+                    acc_output = AcclimateOutput(os.path.join(subdir, 'output.nc'), old_output_format=True,
+                                                 start_date='2000-01-01')
                     acc_output = acc_output[['firms_production', 'firms_consumption']]
                     acc_output = acc_output.sel(agent_type='firm')
                     acc_output._data['net_production'] = (acc_output.firms_production - acc_output.firms_consumption).data
@@ -1796,20 +1759,18 @@ def plot_sensitivity_analysis(path, name=None):
         rel_gains_and_losses[param][default_params[param]] = rel_gains_and_losses[reference_default_run][default_params[reference_default_run]]
 
     WORLD = list(list(data.values())[0].values())[0].agent_region.values
-    WORLD_wo_TX_LA = list(set(WORLD) - {'US.TX', 'US.LA'})
     USA = [r for r in WORLD if r[:3] == 'US.']
 
-    # parameter_letters = {
-    #     'initial_storage_fill_factor': r'$\Psi_i$',
-    #     'price_increase_production_extension': r'$\Delta n_i^{in,v,>}$',
-    #     'target_storage_refill_time': r'$\tau_{i\rightarrow js}$',
-    # }
     parameter_letters = {
         'initial_storage_fill_factor': r'$\Psi$',
         'price_increase_production_extension': r'$\Delta n^{in,v,>}$',
         'target_storage_refill_time': r'$\tau$',
     }
 
+    fig1_data_output = pd.DataFrame(
+        columns=np.arange(t_max),
+        index=pd.MultiIndex(levels=[[], []], codes=[[], []], names=[u'parameter', u'param_val'])
+    )
     fig1, axs1 = plt.subplots(nrows=len(data.keys()), ncols=1, sharex=True, sharey=True,
                               figsize=(MAX_FIG_WIDTH_WIDE, MAX_FIG_WIDTH_WIDE))
     paramter_colors = ['Green', 'Blue', 'Orange']
@@ -1829,13 +1790,11 @@ def plot_sensitivity_analysis(path, name=None):
                 linestyle = 'dotted'
                 alpha = 0.75
                 zorder = 5
-            axs1[row_idx].plot((((dataset.net_production.sum(dim='agent') / dataset.net_production.isel(time=0).sum(dim='agent')).data - 1) * 100).values,
-                               label=label, color=color, linestyle=linestyle, alpha=alpha, zorder=zorder)
+            plot_data = (((dataset.net_production.sum(dim='agent') / dataset.net_production.isel(time=0).sum(dim='agent')).data - 1) * 100).values
+            axs1[row_idx].plot(plot_data, label=label, color=color, linestyle=linestyle, alpha=alpha, zorder=zorder)
+            fig1_data_output.loc[(parameter, param_value), :] = plot_data
         axs1[row_idx].legend(loc='lower right')
-    # axs1[0].set_title('Global net production', fontdict={'fontsize': FSIZE_MEDIUM})
-    # axs1[0].set_title('Global net production\nwithout Texas and Louisiana')
     axs1[-1].set_xlabel('time [days]', fontdict={'fontsize': FSIZE_MEDIUM})
-    # axs1[-1, 1].set_xlabel('time [days]')
     axs1[int(len(axs1) / 2)].set_ylabel('deviation [%]', fontdict={'fontsize': FSIZE_MEDIUM})
     fig1.tight_layout()
     for col, factor in enumerate(np.arange(len(axs1), 0, -1) - 1):
@@ -1851,6 +1810,10 @@ def plot_sensitivity_analysis(path, name=None):
     fig1.text(0.5, 1, 'Global production anomaly', fontdict={'fontsize': FSIZE_MEDIUM}, ha='center', va='top',
               transform=title_transform)
 
+    fig2_data_output = pd.DataFrame(
+        columns=['gains', 'losses', 'sum'],
+        index=pd.MultiIndex(levels=[[], [], []], codes=[[], [], []], names=[u'parameter', u'param_val', u'region'])
+    )
     col_width = {
         'initial_storage_fill_factor': 1,
         'price_increase_production_extension': 0.5,
@@ -1863,9 +1826,9 @@ def plot_sensitivity_analysis(path, name=None):
     }
     fig2, axs2 = plt.subplots(nrows=len(data.keys()), ncols=2, sharex=False, sharey=False,
                               figsize=(MAX_FIG_WIDTH_WIDE, MAX_FIG_WIDTH_WIDE))
-    for row_idx, parameter in tqdm.tqdm(zip(range(len(axs1)), data.keys())):
+    for row_idx, parameter in tqdm.tqdm(list(zip(range(len(axs1)), data.keys()))):
         for param_value, dataset in sorted(list(data[parameter].items())):
-            for col_idx, region_group in enumerate([WORLD, USA]):
+            for col_idx, (region_group, region_group_name) in enumerate(zip([WORLD, USA], ['global', 'USA'])):
                 abs_gl = abs_gains_and_losses[parameter][param_value].sel(agent=['ALL_INDUSTRY:{}'.format(r) for r in region_group])
                 abs_gains = abs_gl.values[abs_gl.values > 0].sum() / 1e6
                 abs_losses = abs_gl.values[abs_gl.values < 0].sum() / 1e6
@@ -1878,6 +1841,11 @@ def plot_sensitivity_analysis(path, name=None):
                 ax.axhline(0, color='k', lw=0.75)
                 ax.xaxis.set_minor_locator(ticker.MultipleLocator(tick_formatters[parameter][0]))
                 ax.xaxis.set_major_locator(ticker.MultipleLocator(tick_formatters[parameter][1]))
+                fig2_data_output.loc[(parameter, param_value, region_group_name), :] = [
+                    abs_gains,
+                    abs_losses,
+                    abs_gains + abs_losses
+                ]
     title_transform = transforms.blended_transform_factory(axs2[0, 0].transAxes, fig2.transFigure)
     fig2.text(0.5, 1, 'Global', fontdict={'fontsize': FSIZE_MEDIUM}, transform=title_transform, ha='center', va='top')
     title_transform = transforms.blended_transform_factory(axs2[0, 1].transAxes, fig2.transFigure)
@@ -1893,6 +1861,11 @@ def plot_sensitivity_analysis(path, name=None):
             move = 0.01
             ax.set_position([x, y - move * factor, w, h - shrink])
 
+    fig3_data_output = pd.Series(
+        index=pd.MultiIndex(levels=[[], [], []], codes=[[], [], []], names=[u'parameter', u'param_value', u'region_group']),
+        name='value',
+        dtype='float64'
+    )
     fig3_size = (MAX_FIG_WIDTH_WIDE, MAX_FIG_WIDTH_WIDE / 3.25)
     fig3_aspect = fig3_size[0] / fig3_size[1]
     fig3, axs3 = plt.subplots(nrows=1, ncols=len(data.keys()) + 1, sharex=False, sharey=False,
@@ -1911,6 +1884,7 @@ def plot_sensitivity_analysis(path, name=None):
                 axs3[ax_idx].bar(x=param_value, height=gain_share, width=col_width[parameter], bottom=previous_share,
                                  align='center', color=paramter_colors[ax_idx], alpha=(1 - rg_index * 0.3))
                 previous_share += gain_share
+                fig3_data_output.loc[(parameter, param_value, region_group)] = gain_share
         axs3[ax_idx].set_xlabel(parameter_letters[parameter], fontdict={'fontsize': FSIZE_MEDIUM})
         axs3[ax_idx].axvline(default_params[parameter], linestyle='dotted', color='k', lw=1)
     axs3[0].set_ylabel('gain share [%]')
@@ -1921,7 +1895,6 @@ def plot_sensitivity_analysis(path, name=None):
     l_ax_width = 1 - l_ax_x0
     l_ax_height = l_ax_width * fig3_aspect
     l_ax.set_position([l_ax_x0, axs3[-2].get_position().y1 - l_ax_height, l_ax_width, l_ax_height])
-    # l_ax.set_aspect('equal')
     r_width, r_height = 0.1, 0.1
     for param_idx, parameter in enumerate(data.keys()):
         for rg_idx, region_group in enumerate(region_groups):
@@ -1937,37 +1910,22 @@ def plot_sensitivity_analysis(path, name=None):
         ax.text(0, 1, chr(ax_idx + 97), fontweight='bold', ha='left', va='bottom', transform=ax.transAxes)
 
     if name is not None:
-        fig1.savefig("/home/robin/repos/harvey_scaling/figures/sensitivity_analysis/time_series_{}.pdf".format(name),
+        fig1.savefig("/home/robin/repos/harvey_scaling/figures/figures/sensitivity_analysis/time_series_{}.pdf".format(name),
                      dpi=300)
-        fig2.savefig("/home/robin/repos/harvey_scaling/figures/sensitivity_analysis/gains_losses_{}.pdf".format(name),
+        fig2.savefig("/home/robin/repos/harvey_scaling/figures/figures/sensitivity_analysis/gains_losses_{}.pdf".format(name),
                      dpi=300)
-        fig3.savefig("/home/robin/repos/harvey_scaling/figures/sensitivity_analysis/gain_shares_{}.pdf".format(name),
+        fig3.savefig("/home/robin/repos/harvey_scaling/figures/figures/sensitivity_analysis/gain_shares_{}.pdf".format(name),
                      dpi=300)
     plt.show()
+    if store_data is not None:
+        for fig_number, output_data in zip(fig_numbers, [fig1_data_output, fig2_data_output, fig3_data_output]):
+            output_data.to_csv(store_data.format(fig_number))
     return data
 
 
-def load_old_data():
-    slope_ensemble_path = "../data/acclimate_output/HARVEY_econYear2015_dT_0.0_2.5_0.5__slopes_0+10000+20000+40000__ccFactor1.07/2021-10-14_15:50:23/"
-    full_data_ensemble_path = "../data/acclimate_output/HARVEY_econYear2015_dT_0_2.5_0.125__re0_100000.0_5000.0__ccFactor1.07/2021-10-14_15:51:50/"
-    datasets = []
-    for ensemble_path in [full_data_ensemble_path, slope_ensemble_path]:
-        datacap = pickle.load(open(ensemble_path + "HARVEY_production_t400_MINQ+PRIVSECTORS__data_cap.pk", 'rb'))
-        meta = pickle.load(open(ensemble_path + "ensemble_meta.pk", 'rb'))
-        if 'slopes' in meta.keys():
-            slope_meta = meta['slopes']
-        else:
-            slope_meta = None
-        data = AggrData(datacap, _scaled_scenarios=meta['scaled_scenarios'], _slope_meta=slope_meta)
-        data.calc_sector_diff('PRIVSECTORS', 'MINQ', _inplace=True)
-        clean_regions(data)
-        datasets.append(data)
-    return datasets[0], datasets[1]
-
-
-def load_new_data():
-    full_data_ensemble_path = "/home/robin/repos/harvey_scaling/data/acclimate_output/HARVEY_econYear2015_dT_0_3.2_0.2__re0_40000.0_2500.0__old_acclimate__ccFactor1.19"
-    slope_ensemble_path = "/home/robin/repos/harvey_scaling/data/acclimate_output/HARVEY_econYear2015_dT_0_3.2_0.8__slopes0+6250+12500__old_acclimate__ccFactor1.19/"
+def load_simulation_data():
+    full_data_ensemble_path = "/home/robin/repos/harvey_scaling/data/acclimate_output/main_analysis/HARVEY_econYear2015_dT_0_3.2_0.2__re0_40000.0_2500.0__old_acclimate__ccFactor1.19"
+    slope_ensemble_path = "/home/robin/repos/harvey_scaling/data/acclimate_output/main_analysis/HARVEY_econYear2015_dT_0_3.2_0.8__slopes0+6250+12500__old_acclimate__ccFactor1.19/"
     datasets = []
     for ensemble_path in [full_data_ensemble_path, slope_ensemble_path]:
         datasets.append(pickle.load(open(ensemble_path + "/production_consumption_netProduction__ALL_INDUSTRY_MINQ.pk", 'rb')))
@@ -1981,50 +1939,50 @@ def load_new_data():
 
 
 if __name__ == '__main__':
-    # data, slope_data = load_new_data(cc_factor=1.197, overcapacity=1.15, old_settings=False, old_acclimate=True)
+    data, slope_data = load_simulation_data()
 
+    fig1a_data = make_agent_var_global_map(data, _sector='ALL_INDUSTRY-MINQ', _variable='firms_production-firms_consumption', _numbering='a', _cbar_lims=[-100, 12], _symmetric_cbar=True, _outfile="../figures/figures/maps/global_map_production_change_PRIVSECTORS-MINQ_dt0_re0.pdf")
+    fig1b_data = make_agent_var_global_map(data, _sector='MINQ', _variable='firms_production-firms_consumption', _numbering='b', _cbar_lims=[-100, 12], _symmetric_cbar=True, _outfile="../figures/figures/maps/global_map_production_change_MINQ_dt0_re0.pdf")
+    fig1a_data.to_csv("/home/robin/repos/harvey_scaling/figures/figure_data/1a.csv")
+    fig1b_data.to_csv("/home/robin/repos/harvey_scaling/figures/figure_data/1b.csv")
 
-    # make_agent_var_global_map(data, _sector='ALL_INDUSTRY-MINQ', _variable='firms_production-firms_consumption', _numbering='a', _cbar_lims=[-100, 12], _symmetric_cbar=True, _outfile="../figures/maps/global_map_production_change_PRIVSECTORS-MINQ_dt0_re0.pdf")
-    # make_agent_var_global_map(data, _sector='MINQ', _variable='firms_production-firms_consumption', _numbering='b', _cbar_lims=[-100, 12], _symmetric_cbar=True, _outfile="../figures/maps/global_map_production_change_MINQ_dt0_re0.pdf")
+    plot_initial_claims(_outfile="/home/robin/repos/harvey_scaling/figures/figures/harvey_initial_claims.pdf")
 
-    # plot_initial_claims(_outfile="../figures/harvey_initial_claims.pdf")
+    plot_radius_extension_map(_numbering='a', _outfile="/home/robin/repos/harvey_scaling/figures/figures/radius_map.pdf")
+    plot_radius_extension_impact(_numbering='b', _outfile="/home/robin/repos/harvey_scaling/figures/figures/radius_extension_impact.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp6b.csv")
 
-    # plot_radius_extension_map(_numbering='a', _outfile="../figures/radius_map.pdf")
-    # plot_radius_extension_impact(_numbering='b', _outfile="../figures/radius_extension_impact.pdf")
+    sst_gmt_relationship(sea='Gulf of Mexico', hurricane_months_only=True, regression=True, monthly_diff_to_historical=True, outfile="/home/robin/repos/harvey_scaling/figures/figures/gulf_of_mex_sst_gmt_relationship.pdf")
 
-    # sst_gmt_relationship(sea='Gulf of Mexico', hurricane_months_only=True, regression=True, monthly_diff_to_historical=True, outfile="/home/robin/repos/harvey_scaling/figures/gulf_of_mex_sst_gmt_relationship.pdf")
+    make_heatmap(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=None, _ylabel='Global relative production\ndifference (% baseline)', _numbering='a', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _outfile="/home/robin/repos/harvey_scaling/figures/figures/heatmaps/heatmap_PRIVSECTORS-MINQ_production_relative_difference_ROW_w_USA.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/2a.csv")
+    make_heatmap_cut(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=r'$\Delta T$ (temperature change in °C)', _ylabel='Global relative production\ndifference (% baseline)', _numbering='c', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _outfile="/home/robin/repos/harvey_scaling/figures/figures/heatmaps/heatmap_cut_PRIVSECTORS-MINQ_production_relative_difference_ROW_w_USA.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/2c.csv")
+    make_heatmap(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=None, _ylabel='Global relative production\ndifference (% baseline)', _numbering='b', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _outfile="/home/robin/repos/harvey_scaling/figures/figures/heatmaps/heatmap_MINQ_production_relative_difference_ROW_w_USA.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/2b.csv")
+    make_heatmap_cut(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=r'$\Delta T$ (temperature change in °C)', _ylabel='Global relative production\ndifference (% baseline)', _numbering='d', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _legend=False, _outfile="/home/robin/repos/harvey_scaling/figures/figures/heatmaps/heatmap_cut_MINQ_production_relative_difference_ROW_w_USA.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/2d.csv")
 
-    # make_heatmap(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=None, _ylabel='Global relative production\ndifference (% baseline)', _numbering='a', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _outfile="../figures/heatmaps/heatmap_PRIVSECTORS-MINQ_production_relative_difference_ROW_w_USA.pdf")
-    # make_heatmap_cut(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=r'$\Delta T$ (temperature change in °C)', _ylabel='Global relative production\ndifference (% baseline)', _numbering='c', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _outfile="../figures/heatmaps/heatmap_cut_PRIVSECTORS-MINQ_production_relative_difference_ROW_w_USA.pdf")
-    # make_heatmap(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=None, _ylabel='Global relative production\ndifference (% baseline)', _numbering='b', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _outfile="../figures/heatmaps/heatmap_MINQ_production_relative_difference_ROW_w_USA.pdf")
-    # make_heatmap_cut(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=r'$\Delta T$ (temperature change in °C)', _ylabel='Global relative production\ndifference (% baseline)', _numbering='d', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _legend=False, _outfile="../figures/heatmaps/heatmap_cut_MINQ_production_relative_difference_ROW_w_USA.pdf")
+    plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), 'WORLD', data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _sst_gmt_factor=0.8, _numbering='a', _sector_label=True, _xlabel=False, _ylabel=True, _ax_right=False, _upper_slope_labels=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/region_gains_and_losses/gains_losses_WORLD_PRIVSECTORS-MINQ.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/3a.csv")
+    plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), 'WORLD', data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _sst_gmt_factor=0.8, _numbering='b', _sector_label=True, _xlabel=False, _ylabel=False, _ax_right=True, _upper_slope_labels=True, _major_ytick_loc=1, _outfile="/home/robin/repos/harvey_scaling/figures/figures/region_gains_and_losses/gains_losses_WORLD_MINQ.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/3b.csv")
+    plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), 'USA', data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _sst_gmt_factor=0.8, _numbering='c', _sector_label=False, _xlabel=True, _ylabel=True, _ax_right=False, _upper_slope_labels=False, _outfile="/home/robin/repos/harvey_scaling/figures/figures/region_gains_and_losses/gains_losses_USA_PRIVSECTORS-MINQ.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/3c.csv")
+    plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), 'USA', data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _sst_gmt_factor=0.8, _numbering='d', _sector_label=False, _xlabel=True, _ylabel=False, _ax_right=True, _upper_slope_labels=False, _minor_ytick_loc=0.5, _major_ytick_loc=1, _outfile="/home/robin/repos/harvey_scaling/figures/figures/region_gains_and_losses/gains_losses_USA_MINQ.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/3d.csv")
 
-    # plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='a', _relative=True, _xlabel=False, _ylabel = True, _inplot_legend = False, _ylim=(50, 99), _minor_ytick_loc=None, _major_ytick_loc=10, _ax_right=False, _plot_regression={'AI-MQ:50': ['A', 'B', 'C', 'D'], 'AI-MQ:75': ['A', 'B','C', 'D']}, _outfile="../figures/gain_shares/gain_shares_PRIVSECTORS-MINQ_AI-MQregions_rel.pdf")
-    # plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='c', _relative=False, _xlabel=True, _ylabel = True, _inplot_legend = True, _ylim=(10, 35), _minor_ytick_loc=None, _major_ytick_loc=10, _inplot_sector_label=False, _ax_right=False, _outfile="../figures/gain_shares/gain_shares_PRIVSECTORS-MINQ_AI-MQregions_abs.pdf")
-    # plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='b', _relative=True, _xlabel=False, _ylabel = False, _inplot_legend = False, _ylim=(20, 100), _minor_ytick_loc=None, _major_ytick_loc=10, _ax_right=True, _plot_regression={'MQ:50+USA': ['A', 'B', 'C', 'D'], 'MQ:75': ['A', 'B','C', 'D']}, _outfile="../figures/gain_shares/gain_shares_MINQ_MQregions_rel.pdf")
-    # plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='d', _relative=False, _xlabel=True, _ylabel = False, _inplot_legend = True, _ylim=(0, 2.1), _minor_ytick_loc=None, _major_ytick_loc=0.5, _inplot_sector_label=False, _ax_right=True, _outfile="../figures/gain_shares/gain_shares_MINQ_MQregions_abs.pdf")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='a', _relative=True, _xlabel=False, _ylabel = True, _inplot_legend = False, _ylim=(50, 99), _minor_ytick_loc=None, _major_ytick_loc=10, _ax_right=False, _plot_regression={'AI-MQ:50': ['A', 'B', 'C', 'D'], 'AI-MQ:75': ['A', 'B','C', 'D']}, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_PRIVSECTORS-MINQ_AI-MQregions_rel.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/4a.csv")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='c', _relative=False, _xlabel=True, _ylabel = True, _inplot_legend = True, _ylim=(10, 35), _minor_ytick_loc=None, _major_ytick_loc=10, _inplot_sector_label=False, _ax_right=False, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_PRIVSECTORS-MINQ_AI-MQregions_abs.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/4c.csv")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='b', _relative=True, _xlabel=False, _ylabel = False, _inplot_legend = False, _ylim=(20, 100), _minor_ytick_loc=None, _major_ytick_loc=10, _ax_right=True, _plot_regression={'MQ:50+USA': ['A', 'B', 'C', 'D'], 'MQ:75': ['A', 'B','C', 'D']}, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_MINQ_MQregions_rel.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/4b.csv")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='d', _relative=False, _xlabel=True, _ylabel = False, _inplot_legend = True, _ylim=(0, 2.1), _minor_ytick_loc=None, _major_ytick_loc=0.5, _inplot_sector_label=False, _ax_right=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_MINQ_MQregions_abs.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/4d.csv")
 
-    # plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _numbering='a', _relative = True, _xlabel = False, _ylim=(0, 99), _major_ytick_loc=10, _outfile="../figures/gain_shares/gain_shares_supp_PRIVSECTORS-MINQ_MQregions_rel.pdf")
-    # plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _numbering = 'b', _ylabel = False, _xlabel = False, _ylim=(20, 100), _ax_right=True, _outfile="../figures/gain_shares/gain_shares_supp_MINQ_MQregions_rel.pdf")
-    # plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='c', _relative = False, _ylabel = True, _ylim=(0, 35), _minor_ytick_loc=None, _major_ytick_loc=10, _inplot_legend = True, _inplot_sector_label=False, _outfile="../figures/gain_shares/gain_shares_supp_PRIVSECTORS-MINQ_MQregions_abs.pdf")
-    # plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='d', _relative=False, _ylabel = False, _ylim=(0, 1.8), _minor_ytick_loc=None, _major_ytick_loc=0.5, _ax_right=True, _inplot_legend = False, _inplot_sector_label=False, _outfile="../figures/gain_shares/gain_shares_supp_MINQ_MQregions_abs.pdf")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _numbering='a', _relative = True, _xlabel = False, _ylim=(50, 99), _major_ytick_loc=10, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_PRIVSECTORS-MINQ_AI-MQregions_rel.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp1a.csv")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _numbering = 'b', _ylabel = False, _xlabel = False, _ylim=(0, 80), _ax_right=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_MINQ_AI-MQregions_rel.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp1b.csv")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='c', _relative = False, _ylabel = True, _ylim=(10, 35), _minor_ytick_loc=None, _major_ytick_loc=10, _inplot_legend = True, _inplot_sector_label=False, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_PRIVSECTORS-MINQ_AI-MQregions_abs.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp1c.csv")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='d', _relative=False, _ylabel = False, _ylim=None, _minor_ytick_loc=None, _major_ytick_loc=0.5, _ax_right=True, _inplot_legend = False, _inplot_sector_label=False, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_MINQ_AI-MQregions_abs.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp1d.csv")
 
-    # plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _numbering='a', _relative = True, _xlabel = False, _ylim=(50, 99), _major_ytick_loc=10, _outfile="../figures/gain_shares/gain_shares_supp_PRIVSECTORS-MINQ_AI-MQregions_rel.pdf")
-    # plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _numbering = 'b', _ylabel = False, _xlabel = False, _ylim=(20, 80), _ax_right=True, _outfile="../figures/gain_shares/gain_shares_supp_MINQ_AI-MQregions_rel.pdf")
-    # plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='c', _relative = False, _ylabel = True, _ylim=(10, 35), _minor_ytick_loc=None, _major_ytick_loc=10, _inplot_legend = True, _inplot_sector_label=False, _outfile="../figures/gain_shares/gain_shares_supp_PRIVSECTORS-MINQ_AI-MQregions_abs.pdf")
-    # plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='d', _relative=False, _ylabel = False, _ylim=None, _minor_ytick_loc=None, _major_ytick_loc=0.5, _ax_right=True, _inplot_legend = False, _inplot_sector_label=False, _outfile="../figures/gain_shares/gain_shares_supp_MINQ_AI-MQregions_abs.pdf")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _numbering='a', _relative = True, _xlabel = False, _ylim=(0, 99), _major_ytick_loc=10, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_PRIVSECTORS-MINQ_MQregions_rel.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp2a.csv")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _numbering = 'b', _ylabel = False, _xlabel = False, _ylim=(20, 100), _ax_right=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_MINQ_MQregions_rel.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp2b.csv")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='c', _relative = False, _ylabel = True, _ylim=(0, 35), _minor_ytick_loc=None, _major_ytick_loc=10, _inplot_legend = True, _inplot_sector_label=False, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_PRIVSECTORS-MINQ_MQregions_abs.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp2c.csv")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='d', _relative=False, _ylabel = False, _ylim=(0, 1.8), _minor_ytick_loc=None, _major_ytick_loc=0.5, _ax_right=True, _inplot_legend = False, _inplot_sector_label=False, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_MINQ_MQregions_abs.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp2d.csv")
 
-    # plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), 'WORLD', data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _sst_gmt_factor=0.8, _numbering='a', _sector_label=True, _xlabel=False, _ylabel=True, _ax_right=False, _upper_slope_labels=True, _outfile="../figures/region_gains_and_losses/gains_losses_WORLD_PRIVSECTORS-MINQ.pdf")
-    # plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), 'WORLD', data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _sst_gmt_factor=0.8, _numbering='b', _sector_label=True, _xlabel=False, _ylabel=False, _ax_right=True, _upper_slope_labels=True, _major_ytick_loc=1, _outfile="../figures/region_gains_and_losses/gains_losses_WORLD_MINQ.pdf")
-    # plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), 'USA', data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _sst_gmt_factor=0.8, _numbering='c', _sector_label=False, _xlabel=True, _ylabel=True, _ax_right=False, _upper_slope_labels=False, _outfile="../figures/region_gains_and_losses/gains_losses_USA_PRIVSECTORS-MINQ.pdf")
-    # plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), 'USA', data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _sst_gmt_factor=0.8, _numbering='d', _sector_label=False, _xlabel=True, _ylabel=False, _ax_right=True, _upper_slope_labels=False, _minor_ytick_loc=0.5, _major_ytick_loc=1, _outfile="../figures/region_gains_and_losses/gains_losses_USA_MINQ.pdf")
+    plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), region='USA', _sst_gmt_factor=0.8, _numbering='a', _sector_label=True, _xlabel=False, _legend=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/compensation_gap/compensation_gap_PRIVSECTORS-MINQ_USA.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/5a.csv")
+    plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), region='USA', _sst_gmt_factor=0.8, _numbering='b', _sector_label=True, _xlabel=False, _ylabel=False, _legend=False, _ax_right=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/compensation_gap/compensation_gap_MINQ_USA.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/5b.csv")
+    plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), region='WORLD', _sst_gmt_factor=0.8, _numbering='c', _sector_label=False, _xlabel=True, _legend=False, _remove_upper_tick=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/compensation_gap/compensation_gap_PRIVSECTORS-MINQ_WORLD.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/5c.csv")
+    plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), region='WORLD', _sst_gmt_factor=0.8, _numbering='d', _sector_label=False, _xlabel=True, _legend=False, _ylabel=False, _ax_right=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/compensation_gap/compensation_gap_MINQ_WORLD.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/5d.csv")
 
-    # plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), region='USA', _sst_gmt_factor=0.8, _numbering='a', _sector_label=True, _xlabel=False, _legend=True, _outfile="../figures/compensation_gap/compensation_gap_PRIVSECTORS-MINQ_USA.pdf")
-    # plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), region='USA', _sst_gmt_factor=0.8, _numbering='b', _sector_label=True, _xlabel=False, _ylabel=False, _legend=False, _ax_right=True, _outfile="../figures/compensation_gap/compensation_gap_MINQ_USA.pdf")
-    # plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), region='WORLD', _sst_gmt_factor=0.8, _numbering='c', _sector_label=False, _xlabel=True, _legend=False, _remove_upper_tick=True, _outfile="../figures/compensation_gap/compensation_gap_PRIVSECTORS-MINQ_WORLD.pdf")
-    # plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), region='WORLD', _sst_gmt_factor=0.8, _numbering='d', _sector_label=False, _xlabel=True, _legend=False, _ylabel=False, _ax_right=True, _outfile="../figures/compensation_gap/compensation_gap_MINQ_WORLD.pdf")
-
-    # plot_sensitivity_analysis(path="/home/robin/repos/harvey_scaling/data/acclimate_output/sensitivity_analysis/2022-05-13_18:58:04unscaled/", name='unscaled')
-    # plot_sensitivity_analysis(path="/home/robin/repos/harvey_scaling/data/acclimate_output/sensitivity_analysis/2022-05-13_18:44:11maximum_scaled/", name='max_scaled')
+    plot_sensitivity_analysis(path="/home/robin/repos/harvey_scaling/data/acclimate_output/sensitivity_analysis/2022-05-13_18:58:04unscaled/", name='unscaled', store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp{}.csv", fig_numbers=[7, 9, 11])
+    plot_sensitivity_analysis(path="/home/robin/repos/harvey_scaling/data/acclimate_output/sensitivity_analysis/2022-05-13_18:44:11maximum_scaled/", name='max_scaled', store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp{}.csv", fig_numbers=[8, 10, 12])
     pass
-

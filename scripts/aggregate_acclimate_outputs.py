@@ -4,8 +4,8 @@ sys.path.append("/home/robin/repos/post-processing")
 sys.path.append("/home/robinmid/repos/post-processing")
 from acclimate.dataset import AcclimateOutput
 
-sys.path.append('/home/robin/repos/harvey_scaling/analysis')
-sys.path.append('/home/robinmid/repos/harvey_scaling/analysis')
+sys.path.append('/home/robin/repos/harvey_scaling/scripts')
+sys.path.append('/home/robinmid/repos/harvey_scaling/scripts')
 from dataformat import AggrData
 
 import tqdm
