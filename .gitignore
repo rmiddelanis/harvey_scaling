@@ -1,5 +1,4 @@
 /.idea/
-/data/external/*
 /data/forcing/*
 /sst_gmt_relationship/data/*
 **/__pycache__
