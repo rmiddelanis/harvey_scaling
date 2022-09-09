@@ -3,10 +3,11 @@ import itertools
 import os
 import pickle
 import numpy as np
+import tqdm
 import yaml
-import sys
 
 from scipy import signal
+from netCDF4 import Dataset
 
 import datetime as dt
 import pandas as pd
@@ -649,38 +650,64 @@ def calc_direct_production_loss(_data, _inplace=False):
 
 
 
-    # probably not needed anymore
-# def get_aggregated_var_over_area(_regions, _var, _data):
-#     if isinstance(_data, str):
-#         dataset = Dataset(_data, "r", format="NETCDF4")
-#     elif isinstance(_data, Dataset):
-#         dataset = _data
-#     else:
-#         raise TypeError('Variable of type string or Dataset required.')
-#     data = dataset["/agents/" + _var.replace('/', '')][:].data
-#     region_indices = get_index_list(_regions, dataset["/region"][:])
-#     variable_cumulative = 0
-#     for sector_index in range(len(dataset.dimensions.get("sector"))):
-#         variable_sector = np.nansum(data[:, sector_index, region_indices])
-#         variable_cumulative = variable_cumulative + variable_sector
-#     return variable_cumulative
-#
-#
-# def get_var_over_ld_plot_for_area(_regions, _var, _lambda_axis, _duration_axis, _ensemble_meta, _experiment_series_dir):
-#     result = np.zeros((len(_lambda_axis), len(_duration_axis)))
-#     for l in range(len(_lambda_axis)):
-#         for d in range(len(_duration_axis)):
-#             iteration_path = os.path.join(_experiment_series_dir, _ensemble_meta[(_lambda_axis[l], _duration_axis[d])][
-#                 'iter_name'] + "/output.nc")
-#             try:
-#                 #                iteration_dataset = dataset_dict[(lambda_axis[l], duration_axis[d])]
-#                 result[l, d] = get_aggregated_var_over_area(_regions, _var, iteration_path)
-#                 #                result[l, d] = get_aggregated_var_over_area_from_dataset(regions, var, iteration_dataset)
-#                 print("l = {}, d = {}, val = {} | {}".format(_lambda_axis[l], _duration_axis[d], result[l, d],
-#                                                              iteration_path))
-#             #                print("l = {}, d = {}, val = {}".format(lambda_axis[l], duration_axis[d], result[l, d]))
-#             except Exception as e:
-#                 print("l = {}, d = {} from file {} could not be loaded.".format(_lambda_axis[l], _duration_axis[d],
-#                                                                                 iteration_path))
-#                 print(e)
-#     return result
+def calc_sector_export(_sectors='MINQ', _aggregate_chn_usa=True, _exclude_domestic_trade=True,
+                       _baseline_path="/mnt/cluster_p/projects/acclimate/data/eora/Eora26-v199.82-2015-CHN-USA_naics_disagg.nc"):
+    baseline_data = Dataset(_baseline_path)
+    if type(_sectors) == str:
+        _sectors = [_sectors]
+    elif _sectors is None:
+        _sectors = baseline_data['sector'][:]
+    flows = baseline_data['flows'][:]
+    exports = pd.DataFrame(columns=['export'])
+    sec_indices = np.where(np.isin(baseline_data['sector'][:], _sectors))[0]
+    for r in tqdm.tqdm(baseline_data['region'][:]):
+        region_idx = np.where(baseline_data['region'][:] == r)[0][0]
+        rs_from = np.where((baseline_data['index_region'][:] == region_idx) & (np.isin(baseline_data['index_sector'], sec_indices)))[0]
+        excluded_region_indices = [region_idx]
+        if _exclude_domestic_trade:
+            if r[:3] == 'US.':
+                excluded_region_indices = np.where(np.isin(baseline_data['region'], WORLD_REGIONS['USA']))[0]
+            elif r[:3] == 'CN.':
+                excluded_region_indices = np.where(np.isin(baseline_data['region'], WORLD_REGIONS['CHN']))[0]
+        rs_to = np.where(~np.isin(baseline_data['index_region'][:], excluded_region_indices))[0]
+        exports.loc[r] = np.ma.filled(flows[rs_from, :][:, rs_to], 0).sum()
+    if _aggregate_chn_usa:
+        for r in ['USA', 'CHN']:
+            region_idx = np.where(np.isin(baseline_data['region'][:], WORLD_REGIONS[r]))[0]
+            rs_from = np.where(np.isin(baseline_data['index_region'][:], region_idx) & (np.isin(baseline_data['index_sector'], sec_indices)))[0]
+            rs_to = np.where(~np.isin(baseline_data['index_region'][:], region_idx))[0]
+            exports.loc[r] = np.ma.filled(flows[rs_from, :][:, rs_to], 0).sum()
+        exports = exports.loc[[i for i in exports.index if i[:3] not in ['CN.', 'US.']]]
+    exports['share'] = exports['export'] / exports['export'].sum()
+    exports = exports.sort_values(by='export', ascending=False)
+    exports['cum_share'] = 0
+    for i in range(len(exports)):
+        exports.loc[exports.index[i], 'cum_share'] = exports.iloc[:i + 1]['share'].sum()
+    return exports
+
+
+def calc_trade_with_region(_regions=None, _sectors=None, _exclude_regions=None,
+                           _baseline_path="/mnt/cluster_p/projects/acclimate/data/eora/Eora26-v199.82-2015-CHN-USA_naics_disagg.nc"):
+    baseline_data = Dataset(_baseline_path)
+    flows = baseline_data['flows'][:]
+    res = pd.DataFrame(columns=['import', 'export', 'total'])
+    target_region_indices = np.where(np.isin(baseline_data['region'][:], _regions))[0]
+    if _sectors is None:
+        _sectors = baseline_data['sector'][:]
+    target_sector_indices = np.where(np.isin(baseline_data['sector'][:], _sectors))[0]
+    target_rs_indices = np.where((np.isin(baseline_data['index_region'], target_region_indices)) & (np.isin(baseline_data['index_sector'], target_sector_indices)))[0]
+    for r in tqdm.tqdm(baseline_data['region'][:]):
+        if r not in _regions and r not in _exclude_regions:
+            r_idx = np.where(baseline_data['region'][:] == r)[0][0]
+            rs_indices = np.where((baseline_data['index_region'] == r_idx) & (np.isin(baseline_data['index_sector'], target_sector_indices)))[0]
+            imp = np.ma.filled(flows[target_rs_indices, :][:, rs_indices], 0).sum()
+            exp = np.ma.filled(flows[rs_indices, :][:, target_rs_indices], 0).sum()
+            total = imp + exp
+            res.loc[r] = [imp, exp, total]
+    for col in ['import', 'export', 'total']:
+        res[col + '_share'] = res[col] / res[col].sum()
+    res = res.sort_values(by='total_share', ascending=False)
+    res['cum_total_share'] = 0
+    for i in range(len(res)):
+        res.loc[res.index[i], 'cum_total_share'] = res.iloc[:i + 1]['total_share'].sum()
+    return res
