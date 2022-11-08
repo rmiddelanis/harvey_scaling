@@ -114,8 +114,15 @@ WORLD_REGIONS['TX_trade:95'] = ['CAN', 'MEX', 'JPN', 'DEU', 'GBR', 'VEN', 'KOR',
                                 'DZA', 'ARG', 'CN.FJ', 'ZAF', 'DNK', 'CN.SH', 'TUR', 'NOR', 'CN.BJ', 'CN.AH', 'KWT',
                                 'FIN', 'CN.SA', 'CN.NM', 'DOM', 'CN.GX', 'CN.JX', 'CN.TJ', 'NZL', 'AGO', 'CN.CQ', 'ARE',
                                 'HUN', 'CN.HL', 'CRI']
+WORLD_REGIONS['EXPORT:50'] = ['DEU', 'CHN', 'USA', 'JPN', 'FRA', 'ITA', 'GBR', 'NLD']
+WORLD_REGIONS['EXPORT:75'] = ['DEU', 'CHN', 'USA', 'JPN', 'FRA', 'ITA', 'GBR', 'NLD', 'CAN', 'BEL', 'KOR', 'ESP', 'RUS',
+                              'SGP', 'CHE', 'MEX', 'IND', 'MYS', 'AUS', 'SWE']
+WORLD_REGIONS['EXPORT:95'] = ['DEU', 'CHN', 'USA', 'JPN', 'FRA', 'ITA', 'GBR', 'NLD', 'CAN', 'BEL', 'KOR', 'ESP', 'RUS',
+                              'SGP', 'CHE', 'MEX', 'IND', 'MYS', 'AUS', 'SWE', 'AUT', 'IDN', 'THA', 'BRA', 'HKG', 'IRL',
+                              'CZE', 'DNK', 'TWN', 'POL', 'NOR', 'FIN', 'PHL', 'HUN', 'ZAF', 'VEN', 'TUR', 'SAU', 'ARE',
+                              'ARG', 'ISR', 'IRN', 'PRT', 'CHL', 'SVK', 'NZL', 'UKR', 'DZA']
 for wr in ['MQ:25', 'MQ:50', 'MQ:60', 'MQ:75', 'MQ:95', 'TX_trade:50', 'TX_trade:75', 'TX_trade:95', 'AI-MQ:50',
-           'AI-MQ:75', 'AI-MQ:95', 'AI:50', 'AI:75', 'AI:95']:
+           'AI-MQ:75', 'AI-MQ:95', 'AI:50', 'AI:75', 'AI:95', 'EXPORT:50', 'EXPORT:75', 'EXPORT:95']:
     for sr in list(WORLD_REGIONS[wr]):
         if sr in WORLD_REGIONS.keys():
             WORLD_REGIONS[wr].remove(sr)
@@ -682,7 +689,7 @@ def calc_sector_export(_sectors='MINQ', _aggregate_chn_usa=True, _exclude_domest
     exports = exports.sort_values(by='export', ascending=False)
     exports['cum_share'] = 0
     for i in range(len(exports)):
-        exports.loc[exports.index[i], 'cum_share'] = exports.iloc[:i + 1]['share'].sum()
+        exports.loc[exports.index[i], 'cum_share'] = float(exports.iloc[:i + 1]['share'].sum())
     return exports
 
 

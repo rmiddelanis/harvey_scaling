@@ -837,7 +837,7 @@ def make_scatter_plot(_data: AggrData, _clip=365, _x_dim='direct_loss', _y_dim='
     plt.show()
 
 
-def make_agent_var_global_map(_data, _sector='MINQ', _variable='incoming_demand', _dt=0, _re=0, _exclude_regions=None,
+def make_agent_var_global_map(_data, _sector='MINQ', _variable='incoming_demand', _dt=0., _re=0, _exclude_regions=None,
                               _t_0=4, _t_agg=365, _plot_shares=True, _cbar_lims=None, _numbering=None, _outfile=None,
                               _symmetric_cbar=True, _show_sector_name=True):
     if _variable not in _data.get_vars():
@@ -1275,7 +1275,7 @@ def plot_global_gain_shares(_data: AggrData, _region_groups, _slopes=None, _gaus
     plt.tight_layout()
 
 
-def plot_global_shares_from_slope_dataset(_data: AggrData, _region_groups, _sst_gmt_factor=0.5, _outfile=None,
+def plot_global_shares_from_slope_dataset(_data: AggrData, _region_groups, _sst_gmt_factor=0.8, _outfile=None,
                                           _numbering=None, _relative=True, _t0=4, _t_agg=365,
                                           _ylim=None, _ylabel=True, _xlabel=True, _ax_right=False, _bar_reg_label=True,
                                           _inplot_legend=True, _inplot_sector_label=True,
@@ -1611,25 +1611,29 @@ def calc_stats(_data: AggrData, _sector='MINQ', _variable='production', _exclude
     return stats
 
 
-def make_receipt_output(_data: AggrData, _slope_data: AggrData, _sst_gmt_ratio=0.5, _pdf_output=False):
-    temperatures = [0, 1, 2, 3, 4, 5]
-    slopes = [10000]
-    outfile_path = "/home/robin/repos/harvey_scaling/RECEIPT/reduced_data/"
+def store_radius_shapes_for_receipt(_sst_gmt_ratio=0.8):
+    temperatures = [0, 1, 2, 3, 4]
+    slopes_global = [_dr * _sst_gmt_ratio for _dr in [6250]]
+    outfile_path = "/home/robin/repos/harvey_scaling/data/RECEIPT_output/"
+    plot_radius_extension_map(_outfile=None, _shape_outpath=outfile_path + "radius_shapes/",
+                              re_selection=[t * s for s in slopes_global for t in temperatures])
+
+
+def store_visualizer_output_for_receipt(_data: AggrData, _slope_data: AggrData, _sst_gmt_ratio=0.8):
+    temperatures = [0, 1, 2, 3, 4]
+    slopes_global = [_dr * _sst_gmt_ratio for _dr in [6250]]
+    outfile_path = "/home/robin/repos/harvey_scaling/data/RECEIPT_output/"
 
     production_data = None
     for dt_global in temperatures:
-        for slope in slopes:
-            dt = dt_global * _sst_gmt_ratio
-            re = dt_global * slope
-            if _pdf_output:
-                outfile = outfile_path + "map_plots/map_{}_{}.pdf".format(dt / _sst_gmt_ratio, re)
-            else:
-                outfile = None
-            prod_anomaly = make_agent_var_global_map(_data, _sector='PRIVSECTORS', _variable='production', _dt=dt, _re=re,
-                                                     _cbar_lims=[-40, 4], _symmetric_cbar=True, _plot_shares=False,
-                                                     _show_sector_name=False, _outfile=outfile)
+        for slope_global in slopes_global:
+            dt_local = np.round(dt_global * _sst_gmt_ratio, 3)
+            re = dt_global * slope_global
+            prod_anomaly = make_agent_var_global_map(_data, _sector='ALL_INDUSTRY', _variable='firms_production-firms_consumption', _dt=dt_local, _re=re,
+                                                     _cbar_lims=None, _symmetric_cbar=False, _plot_shares=False,
+                                                     _show_sector_name=False, _outfile=None).to_frame()
             prod_anomaly.loc['radius_extension'] = re
-            prod_anomaly.loc['temperature_increase'] = dt / _sst_gmt_ratio
+            prod_anomaly.loc['temperature_increase'] = dt_global
             prod_anomaly = prod_anomaly.transpose().set_index(['temperature_increase', 'radius_extension'], drop=True)
             if production_data is None:
                 production_data = prod_anomaly
@@ -1641,23 +1645,11 @@ def make_receipt_output(_data: AggrData, _slope_data: AggrData, _sst_gmt_ratio=0
     production_data.index.set_names(['temperature_increase [degC]', 'radius_extension [km]'], inplace=True)
     production_data.to_csv(outfile_path + "production_anomaly.csv")
 
-    plot_radius_extension_map(_outfile=outfile_path + "radius_map/radius_map.pdf", _shape_outpath=outfile_path + "radius_map/",
-                              re_selection=[t * re_ratio for re_ratio in slopes for t in temperatures])
-
-    gain_shares = plot_global_shares_from_slope_dataset(_slope_data.get_sectors('PRIVSECTORS'),
-                                                        _region_groups=['USA', 'EXPORT:50', 'EXPORT:75', 'EXPORT:95'])
-    gain_shares_output = pd.DataFrame(columns=['USA', 'EXPORT:50', 'EXPORT:75', 'EXPORT:95'],
-                                      index=pd.MultiIndex.from_tuples(zip(temperatures, [t * slope / 1000 for t in temperatures for slope in slopes])))
-    for region in gain_shares_output.columns:
-        shares = get_slope_means_and_errors(gain_shares.get_regions(region))
-        for t in temperatures:
-            for s in slopes:
-                t_idx = np.where(shares[s]['x_vals'] == t * _sst_gmt_ratio)[0][0]
-                gain_shares_output.loc[(t, t * s / 1000), region] = shares[s]['mean_vals'][t_idx]
-    gain_shares_output.iloc[:, 1:] = gain_shares_output.iloc[:, 1:] - gain_shares_output.iloc[:, :-1].values
-    gain_shares_output['WORLD'] = 100 - gain_shares_output.sum(axis=1)
-    gain_shares_output.index.set_names(['temperature_increase [degC]', 'radius_extension [km]'], inplace=True)
-    gain_shares_output.to_csv(outfile_path + "gain_shares.csv")
+    plot_global_shares_from_slope_dataset(
+        slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY'),
+        _region_groups=['USA', 'EXPORT:50', 'EXPORT:75', 'EXPORT:95'], _sst_gmt_factor=0.8,
+        store_data="/home/robin/repos/harvey_scaling/data/RECEIPT_output/gain_shares.csv")
+    plt.close('all')
 
 
 def sst_gmt_relationship(sea, hurricane_months_only=True, regression=True, monthly_diff_to_historical=True,
