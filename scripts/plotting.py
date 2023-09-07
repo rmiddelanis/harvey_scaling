@@ -57,7 +57,7 @@ REGION_COLORS = plt.cm.get_cmap('Set2')
 
 
 def plot_initial_claims(_plot_from='07-01-2017', _plot_to='01-01-2018', _shade_from='2017-08-26',
-                        _shade_to='2017-10-28', _outfile=None):
+                        _shade_to='2017-10-28', _outfile=None, _output_resolution=None):
     data = pd.read_csv(os.path.join(rootdir, "data/external/TXICLAIMS_1986_to_2019.csv"), na_values=['.'])
     data.dropna(inplace=True)
     data.DATE = pd.to_datetime(data.DATE)
@@ -73,7 +73,7 @@ def plot_initial_claims(_plot_from='07-01-2017', _plot_to='01-01-2018', _shade_f
     plt.legend(frameon=False)  # (loc='upper right')
     plt.tight_layout()
     if _outfile is not None:
-        plt.savefig(_outfile, dpi=300)
+        plt.savefig(_outfile, dpi=300 if _output_resolution is None else _output_resolution)
     plt.show()
 
 
@@ -294,7 +294,7 @@ def prepare_heatmap_figure(_data: AggrData, _type: str, _x_ax: bool, gmt_anomaly
 def make_heatmap(_data: AggrData, _gauss_filter=False,
                  _gauss_sigma=1, _gauss_truncate=1, _outfile=None, _slopes=None, _ylabel=None, _xlabel=None,
                  _sst_gmt_factor=0.5, _data_division=1.0, _numbering=None, _vmin=None, _vmax=None, _slope_data=None,
-                 _y_ax_precision=3, store_data=None):
+                 _y_ax_precision=3, store_data=None, _output_resolution=None):
     if _data.shape[:3] != (1, 1, 1) or _data.shape[-1] != 1 or (
             _slope_data is not None and (_slope_data.shape[:3] != (1, 1, 1) or _slope_data.shape[-1] != 1)):
         raise ValueError("All dimensions of the datasets except lambda and duration.")
@@ -396,7 +396,7 @@ def make_heatmap(_data: AggrData, _gauss_filter=False,
     transform = transforms.blended_transform_factory(ax.transAxes, fig.transFigure)
     ax.text(0.5, 0.98, sector_name, transform=transform, ha='center', va='top', fontsize=FSIZE_MEDIUM)
     if _outfile is not None:
-        plt.savefig(_outfile, dpi=300)
+        plt.savefig(_outfile, dpi=300 if _output_resolution is None else _output_resolution)
     if store_data is not None:
         store_slope_data = pd.DataFrame(
             data=_slope_data.data.reshape((21, 15)),
@@ -418,7 +418,7 @@ def make_heatmap(_data: AggrData, _gauss_filter=False,
 def make_heatmap_cut(_data: AggrData, _slopes=None, _outfile=None, _gauss_filter=True, _gauss_sigma=1,
                      _gauss_truncate=1, _plot_xax=True, _ylabel=None, _xlabel=None, _sst_gmt_factor=0.5,
                      _duration_0=0, _numbering=None, _slope_data=None, _y_ax_precision=3, _legend=True,
-                     store_data=None):
+                     store_data=None, _output_resolution=None):
     if _data.shape[:3] != (1, 1, 1) or _data.shape[-1] != 1 or (
             _slope_data is not None and (_slope_data.shape[:3] != (1, 1, 1) or _slope_data.shape[-1] != 1)):
         raise ValueError("All dimensions of the datasets except lambda and duration.")
@@ -464,7 +464,7 @@ def make_heatmap_cut(_data: AggrData, _slopes=None, _outfile=None, _gauss_filter
     if _legend:
         ax.legend(frameon=False)
     if _outfile is not None:
-        plt.savefig(_outfile, dpi=300)
+        plt.savefig(_outfile, dpi=300 if _output_resolution is None else _output_resolution)
     if store_data is not None:
         data_output = pd.DataFrame(
             columns=['scenario', 'delta_t', 'min', 'mean', 'max']
@@ -839,7 +839,7 @@ def make_scatter_plot(_data: AggrData, _clip=365, _x_dim='direct_loss', _y_dim='
 
 def make_agent_var_global_map(_data, _sector='MINQ', _variable='incoming_demand', _dt=0., _re=0, _exclude_regions=None,
                               _t_0=4, _t_agg=365, _plot_shares=True, _cbar_lims=None, _numbering=None, _outfile=None,
-                              _symmetric_cbar=True, _show_sector_name=True):
+                              _symmetric_cbar=True, _show_sector_name=True, _output_resolution=None):
     if _variable not in _data.get_vars():
         raise ValueError("passed dataset does not contain variable {}".format(_variable))
     _data = copy.deepcopy(_data.get_vars(_variable))
@@ -938,7 +938,7 @@ def make_agent_var_global_map(_data, _sector='MINQ', _variable='incoming_demand'
     if _numbering is not None:
         fig.text(0, min(ax.get_position().y1, 0.98), _numbering, fontweight='bold', ha='left', va='center')
     if _outfile is not None:
-        plt.savefig(_outfile, dpi=300)
+        plt.savefig(_outfile, dpi=300 if _output_resolution is None else _output_resolution)
     return pd.Series(data_array, _data.get_regions(), name='value')
 
 
@@ -1041,7 +1041,7 @@ def make_flow_var_global_map(_sector='MINQ', _variable='demand_request', _exclud
 
 def plot_gains_and_losses(_data: AggrData, _slopes=None, _region_group=None, _gauss_filter=False, _gauss_sigma=1,
                           _gauss_truncate=1, _sst_gmt_factor=0.5, _ylabel_divisor=1.0, _outfile=None, _numbering=None,
-                          _x_label=True, _legend=False):
+                          _x_label=True, _legend=False, _output_resolution=None):
     if _data.get_sim_duration() != 1:
         raise ValueError('Must pass data with only one timestep')
     if len(_data.get_vars()) != 1:
@@ -1122,12 +1122,13 @@ def plot_gains_and_losses(_data: AggrData, _slopes=None, _region_group=None, _ga
     if _numbering is not None:
         fig.text(0, 1, _numbering, fontweight='bold', ha='left', va='top')
     if _outfile is not None:
-        plt.savefig(_outfile, dpi=300)
+        plt.savefig(_outfile, dpi=300 if _output_resolution is None else _output_resolution)
 
 
 def plot_compensation_gap(_data: AggrData, region, _t0=4, _t_agg=365, _sst_gmt_factor=0.5, _legend=True,
                           _numbering=None, _xlabel=True, _ylabel=True, _outfile=None, _inplot_region_info=False,
-                          _sector_label=True, _remove_upper_tick=False, _ax_right=False, store_data=None):
+                          _sector_label=True, _remove_upper_tick=False, _ax_right=False, store_data=None,
+                          _output_resolution=None):
     if (_data.shape[0], _data.shape[2]) != (1, 1):
         raise ValueError('Can only pass data with one variable and sector.')
     if _data.slope_meta is None:
@@ -1223,7 +1224,7 @@ def plot_compensation_gap(_data: AggrData, region, _t0=4, _t_agg=365, _sst_gmt_f
         trans = transforms.blended_transform_factory(fig.transFigure, ax.transAxes)
         fig.text(0.05 if not _ax_right else 0, 1, _numbering, fontweight='bold', ha='left', va='top', transform=trans)
     if _outfile is not None:
-        plt.savefig(_outfile, dpi=300)
+        plt.savefig(_outfile, dpi=300 if _output_resolution is None else _output_resolution)
     if store_data is not None:
         output_data.to_csv(store_data)
 
@@ -1280,7 +1281,7 @@ def plot_global_shares_from_slope_dataset(_data: AggrData, _region_groups, _sst_
                                           _ylim=None, _ylabel=True, _xlabel=True, _ax_right=False, _bar_reg_label=True,
                                           _inplot_legend=True, _inplot_sector_label=True,
                                           _minor_ytick_loc=None, _major_ytick_loc=None, _plot_regression=None,
-                                          store_data=None):
+                                          store_data=None, _output_resolution=None):
     if (_data.shape[0], _data.shape[2]) != (1, 1):
         raise ValueError('Can only pass data with one variable and sector.')
     if type(_region_groups) == str:
@@ -1401,7 +1402,7 @@ def plot_global_shares_from_slope_dataset(_data: AggrData, _region_groups, _sst_
         transform = transforms.blended_transform_factory(fig.transFigure, ax.transAxes)
         fig.text(0.05 if not _ax_right else 0, 1, _numbering, ha='left', va='top', fontweight='bold', transform=transform)
     if _outfile is not None:
-        plt.savefig(_outfile, dpi=300)
+        plt.savefig(_outfile, dpi=300 if _output_resolution is None else _output_resolution)
     if store_data is not None:
         output_data.to_csv(store_data)
     return _data
@@ -1411,7 +1412,7 @@ def plot_gains_and_losses_from_slope_dataset(_slope_data: AggrData, _region_grou
                                              _numbering=None, _relative=True, _t0=4, _t_agg=365, _ax_right=False,
                                              _ylim=None, _ylabel=True, _xlabel=True, _sector_label=False,
                                              _upper_slope_labels=False, _minor_ytick_loc=None, _major_ytick_loc=None,
-                                             store_data=None):
+                                             store_data=None, _output_resolution=None):
     if (_slope_data.shape[0], _slope_data.shape[2]) != (1, 1):
         raise ValueError('Can only pass data with one variable and sector.')
     if _data is not None and (_data.shape[0], _data.shape[2]) != (1, 1):
@@ -1543,7 +1544,7 @@ def plot_gains_and_losses_from_slope_dataset(_slope_data: AggrData, _region_grou
         fig.text(0.06 if not _ax_right else 0, 1, _numbering, ha='left', va='top', fontweight='bold',
                  transform=transform)
     if _outfile is not None:
-        plt.savefig(_outfile, dpi=300)
+        plt.savefig(_outfile, dpi=300 if _output_resolution is None else _output_resolution)
     if store_data is not None:
         output_data.to_csv(store_data)
 
