@@ -63,6 +63,7 @@ def plot_initial_claims(_plot_from='07-01-2017', _plot_to='01-01-2018', _shade_f
     data.DATE = pd.to_datetime(data.DATE)
     data.TXICLAIMS = data.TXICLAIMS.astype(int)
     fig, ax = plt.subplots(figsize=(MAX_FIG_WIDTH_NARROW, MAX_FIG_WIDTH_NARROW))
+    fig.set_facecolor('none')
     data = data[(data.DATE >= _plot_from) & (data.DATE <= _plot_to)]
     data.plot(x='DATE', y='TXICLAIMS', ax=ax, label='TX Initial Claims', xlabel='time', ylabel='claims')
     shade_data = data[(data.DATE >= _shade_from) & (data.DATE <= _shade_to)]
@@ -77,7 +78,7 @@ def plot_initial_claims(_plot_from='07-01-2017', _plot_to='01-01-2018', _shade_f
     plt.show()
 
 
-def plot_radius_extension_map(_numbering=None, _outfile=None, _shape_outpath=None, re_selection=None):
+def plot_radius_extension_map(_numbering=None, _outfile=None, _shape_outpath=None, re_selection=None, _output_resolution=None):
     states = ['Louisiana', 'Texas']
     affected_counties = json.load(open(os.path.join(rootdir, 'data/generated/affected_counties.json'), 'rb'))
     if re_selection is not None:
@@ -89,6 +90,7 @@ def plot_radius_extension_map(_numbering=None, _outfile=None, _shape_outpath=Non
     fig_width = MAX_FIG_WIDTH_NARROW
     fig_height = fig_width * 0.75
     fig, (ax1, cbar_ax) = plt.subplots(1, 2, figsize=(fig_width, fig_height))
+    fig.set_facecolor('none')
     cbar_width = 0.02
     cbar_x2 = 1 - (0.15 * MAX_FIG_WIDTH_NARROW / fig_width)
     cbar_x1 = cbar_x2 - cbar_width
@@ -183,7 +185,7 @@ def plot_radius_extension_map(_numbering=None, _outfile=None, _shape_outpath=Non
     if _numbering is not None:
         fig.text(0, 1, _numbering, ha='left', va='top', fontweight='bold')
     if _outfile is not None:
-        plt.savefig(_outfile, dpi=300, format='pdf')
+        plt.savefig(_outfile, dpi=300 if _output_resolution is None else _output_resolution, format='pdf')
     if _shape_outpath is not None:
         hwm_gdf[['latitude', 'longitude', 'geometry']].to_file(_shape_outpath + "/high_water_marks_shapes.shp")
         track_shp.to_file(_shape_outpath + "/storm_track.shp")
@@ -194,8 +196,9 @@ def plot_radius_extension_map(_numbering=None, _outfile=None, _shape_outpath=Non
     plt.show()
 
 
-def plot_radius_extension_impact(_outfile=None, _numbering=None, store_data=None):
+def plot_radius_extension_impact(_outfile=None, _numbering=None, store_data=None, _output_resolution=None):
     fig, ax = plt.subplots(figsize=(MAX_FIG_WIDTH_NARROW, 0.75 * MAX_FIG_WIDTH_NARROW))
+    fig.set_facecolor('none')
     initial_forcing_intensities = json.load(
         open(os.path.join(rootdir, "data/generated/initial_forcing_params.json"), "rb"))
     affected_counties = json.load(open(os.path.join(rootdir, 'data/generated/affected_counties.json'), 'rb'))
@@ -234,7 +237,7 @@ def plot_radius_extension_impact(_outfile=None, _numbering=None, store_data=None
         fig.text(0, 1, _numbering, ha='left', va='top', fontweight='bold')
     plt.show()
     if isinstance(_outfile, str):
-        fig.savefig(_outfile, dpi=300)
+        fig.savefig(_outfile, dpi=300 if _output_resolution is None else _output_resolution)
     if store_data is not None:
         data_output.to_csv(store_data)
 
@@ -260,6 +263,7 @@ def prepare_heatmap_figure(_data: AggrData, _type: str, _x_ax: bool, gmt_anomaly
     cbar_bbox = (cbar_bbox_x1, ax_bbox_y1, cbar_width, ax_height)
     print(ax_bbox, "\n", cbar_bbox)
     fig = plt.figure(figsize=(fig_width, fig_height))
+    fig.set_facecolor('none')
     ax, cbar_ax = fig.add_axes(ax_bbox), fig.add_axes(cbar_bbox)
     # ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%1.0f'))
     ax.yaxis.set_major_locator(ticker.MaxNLocator(8))
@@ -301,6 +305,7 @@ def make_heatmap(_data: AggrData, _gauss_filter=False,
     fig, ax, cbar_ax = prepare_heatmap_figure(_data, _type='heatmap', _x_ax=True, _xlabel=_xlabel is not None,
                                               _sst_gmt_factor=_sst_gmt_factor, _numbering=_numbering,
                                               _y_ax_precision=_y_ax_precision)
+    fig.set_facecolor('none')
     _data_aggregated = copy.deepcopy(_data)
     data_array = _data.data.reshape((len(_data.get_re_axis()), len(_data.get_dt_axis())))
     data_array /= _data_division
@@ -427,6 +432,7 @@ def make_heatmap_cut(_data: AggrData, _slopes=None, _outfile=None, _gauss_filter
     fig, ax, _ = prepare_heatmap_figure(_data, _type='heatmap_cut', _x_ax=_plot_xax, _sst_gmt_factor=_sst_gmt_factor,
                                         _numbering=_numbering, _y_ax_precision=_y_ax_precision,
                                         _xlabel=_xlabel is not None)
+    fig.set_facecolor('none')
     if _slope_data is None:
         data_array = _data.data.reshape((len(_data.get_re_axis()), len(_data.get_dt_axis())))
         if _slopes is None and _slope_data is not None:
@@ -623,6 +629,7 @@ def make_region_impact_plot(_data: AggrData, _absolute_consumption_deviation_thr
     bar_width = width / num_scenarios
     height_ratios = [0.2, 0.05, 0.25] if _break_absolute_axis is not False else [0.25, 0, 0.25]
     fig = plt.figure(figsize=(MAX_FIG_WIDTH_WIDE, MAX_FIG_WIDTH_NARROW * 1.5))
+    fig.set_facecolor('none')
     gs = fig.add_gridspec(3, 1, height_ratios=height_ratios)
     ax2 = fig.add_subplot(gs[2])
     ax1_1 = fig.add_subplot(gs[0], sharex=ax2)
@@ -764,6 +771,7 @@ def make_scatter_plot(_data: AggrData, _clip=365, _x_dim='direct_loss', _y_dim='
     }
     if _z_vis == 'cbar':
         fig, ax = plt.subplots(figsize=figsize)
+        fig.set_facecolor('none')
         cm = plt.cm.get_cmap(_cmap)
         if _num_cbar_bins is not None:
             cm = mpl.colors.LinearSegmentedColormap.from_list('name', cm(np.linspace(0.1, 0.8, _num_cbar_bins)))
@@ -883,6 +891,7 @@ def make_agent_var_global_map(_data, _sector='MINQ', _variable='incoming_demand'
                          xs=[0, (abs(_cbar_lims[0])) / (_cbar_lims[1] - _cbar_lims[0]), 1], # alphas=[0.5, 0, 0.5]
                          )
     fig = plt.figure(figsize=(MAX_FIG_WIDTH_WIDE, MAX_FIG_WIDTH_WIDE * 0.44))
+    fig.set_facecolor('none')
     gs = plt.GridSpec(1, 2, width_ratios=[1, 0.03])
     ax = fig.add_subplot(gs[0, 0])
     cax = fig.add_subplot(gs[0, 1])
@@ -1013,6 +1022,7 @@ def make_flow_var_global_map(_sector='MINQ', _variable='demand_request', _exclud
         xs=[0, (abs(min(data_anomalies))) / (max(data_anomalies) - min(data_anomalies)), 1]
     )
     fig = plt.figure(figsize=(MAX_FIG_WIDTH_WIDE, MAX_FIG_WIDTH_WIDE * 0.44))
+    fig.set_facecolor('none')
     gs = plt.GridSpec(1, 2, width_ratios=[1, 0.03])
     ax = fig.add_subplot(gs[0, 0])
     cax = fig.add_subplot(gs[0, 1])
@@ -1075,6 +1085,7 @@ def plot_gains_and_losses(_data: AggrData, _slopes=None, _region_group=None, _ga
     if not _x_label:
         height_scale = height_scale * 0.9
     fig, ax = plt.subplots(figsize=(MAX_FIG_WIDTH_NARROW, MAX_FIG_WIDTH_NARROW * height_scale))
+    fig.set_facecolor('none')
     ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
     ax.xaxis.set_minor_locator(ticker.MultipleLocator(_data.dT_stepwidth / _sst_gmt_factor))
     ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
@@ -1152,7 +1163,10 @@ def plot_compensation_gap(_data: AggrData, region, _t0=4, _t_agg=365, _sst_gmt_f
     if _sector_label:
         y_scale += 0.02
     x_scale = 1
+    if _ax_right and _ylabel:
+        x_scale += .05
     fig, ax = plt.subplots(figsize=(fig_width * x_scale, fig_height * y_scale))
+    fig.set_facecolor('none')
     ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
     ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
     ax.xaxis.set_ticks_position('none')
@@ -1208,7 +1222,11 @@ def plot_compensation_gap(_data: AggrData, region, _t0=4, _t_agg=365, _sst_gmt_f
         region_name = region
         if region_name == 'WORLD':
             region_name = 'Global'
-        fig.text(0, 0.5 / y_scale, '{} CLR'.format(region_name), rotation=90, ha='left',
+        if not _ax_right:
+            ylabel_pos = 0
+        else:
+            ylabel_pos = 1 - .03
+        fig.text(ylabel_pos, 0.5 / y_scale, '{} CLR'.format(region_name), rotation=90, ha='left',
                  va='center', transform=trans, fontsize=FSIZE_MEDIUM)
     if _remove_upper_tick:
         ax.set_yticks(ax.get_yticks()[:-2])
@@ -1256,6 +1274,7 @@ def plot_global_gain_shares(_data: AggrData, _region_groups, _slopes=None, _gaus
             'interp_gains': interp_gains
         }
     fig, axs = plt.subplots(int(np.sqrt(len(_region_groups))), int(np.ceil(np.sqrt(len(_region_groups)))))
+    fig.set_facecolor('none')
     dT_sst_list = _data.get_dt_axis()
     for region_group, ax in zip(_region_groups, axs.flatten()):
         ax.set_title(region_group)
@@ -1300,7 +1319,10 @@ def plot_global_shares_from_slope_dataset(_data: AggrData, _region_groups, _sst_
     x_scale = 1
     if _ax_right and not _ylabel:
         x_scale -= .02
+    elif _ax_right and _ylabel:
+        x_scale += .02
     fig, ax = plt.subplots(figsize=(MAX_FIG_WIDTH_NARROW * x_scale, MAX_FIG_WIDTH_NARROW * y_scale))
+    fig.set_facecolor('none')
     ax_width = 0.85 / x_scale
     ax_height = 0.85 / y_scale
     ax_x0 = 0.12 / x_scale if not _ax_right else (1 - 0.12) / x_scale - ax_width
@@ -1387,7 +1409,11 @@ def plot_global_shares_from_slope_dataset(_data: AggrData, _region_groups, _sst_
         else:
             label = 'Absolute gains (bn USD)'
         transform = transforms.blended_transform_factory(fig.transFigure, ax.transAxes)
-        fig.text(0, .5, label, ha='left', va='center', rotation=90, transform=transform, fontsize=FSIZE_MEDIUM)
+        if _ax_right:
+            ylabel_pos = .95
+        else:
+            ylabel_pos = 0
+        fig.text(ylabel_pos, .5, label, ha='left', va='center', rotation=90, transform=transform, fontsize=FSIZE_MEDIUM)
     ax.set_xticks(minor_xtick_positions)
     if _xlabel:
         ax.set_xticklabels([int(l) for l in minor_xtick_labels])
@@ -1438,7 +1464,10 @@ def plot_gains_and_losses_from_slope_dataset(_slope_data: AggrData, _region_grou
     x_scale = 1
     if _ax_right and not _ylabel:
         x_scale -= .07
+    elif _ax_right and _ylabel:
+        x_scale += .05
     fig, ax = plt.subplots(figsize=(MAX_FIG_WIDTH_NARROW * x_scale, MAX_FIG_WIDTH_NARROW * y_scale))
+    fig.set_facecolor('none')
     ax_width = 0.8 / x_scale
     ax_height = 0.8 / y_scale
     ax_x0 = 0.18 / x_scale if not _ax_right else (1 - 0.16) / x_scale - ax_width
@@ -1521,10 +1550,14 @@ def plot_gains_and_losses_from_slope_dataset(_slope_data: AggrData, _region_grou
         transform = transforms.blended_transform_factory(ax.transAxes, fig.transFigure)
         fig.text(0.5, 0.98, sector_name, ha='center', va='top', transform=transform, fontsize=FSIZE_MEDIUM)
     if _ylabel:
+        if not _ax_right:
+            ylabelpos = [0, .055]
+        else:
+            ylabelpos = [1 - .1, 1 - .05]
         transform = transforms.blended_transform_factory(fig.transFigure, ax.transData)
-        fig.text(0, 0, r'losses   $\longleftrightarrow$   gains', ha='left', va='center', rotation=90,
+        fig.text(ylabelpos[0], 0, r'losses   $\longleftrightarrow$   gains', ha='left', va='center', rotation=90,
                  transform=transform, fontsize=FSIZE_MEDIUM)
-        fig.text(0.055, 0, '(bn USD)', ha='left', va='center', rotation=90, transform=transform, fontsize=FSIZE_MEDIUM)
+        fig.text(ylabelpos[1], 0, '(bn USD)', ha='left', va='center', rotation=90, transform=transform, fontsize=FSIZE_MEDIUM)
     ax.set_xticks(xtick_positions)
     if _xlabel:
         ax.set_xticklabels([int(l) for l in xtick_labels])
@@ -1572,6 +1605,7 @@ def plot_sector_gain_shares(_data: AggrData, _regions, _sector, _slopes=None, _g
             'interp_gain_shares': interp_gain_shares
         }
     fig, axs = plt.subplots(int(np.ceil(np.sqrt(len(_regions)))), int(np.ceil(np.sqrt(len(_regions)))))
+    fig.set_facecolor('none')
     dT_sst_list = _data.get_dt_axis()
     for region_group, ax in zip(_regions, axs.flatten()):
         ax.set_title(region_group)
@@ -1654,10 +1688,11 @@ def store_visualizer_output_for_receipt(_data: AggrData, _slope_data: AggrData, 
 
 
 def sst_gmt_relationship(sea, hurricane_months_only=True, regression=True, monthly_diff_to_historical=True,
-                         outfile=None):
+                         outfile=None, _output_resolution=None):
     fig_width = MAX_FIG_WIDTH_WIDE
     fig_height = MAX_FIG_WIDTH_WIDE * 0.5
     fig, axs = plt.subplots(ncols=3, sharey=True, sharex=True, figsize=(fig_width, fig_height), constrained_layout=True)
+    fig.set_facecolor('none')
     mask = xr.load_dataarray("/home/robin/data/isimip/masks/generated/{}.nc".format(sea.replace(' ', '_')))
     markers = ['d', '^', 'o', 's', 'p']
     ssp_names = ['SSP-126', 'SSP-370', 'SSP-585']
@@ -1703,10 +1738,10 @@ def sst_gmt_relationship(sea, hurricane_months_only=True, regression=True, month
         ax.text(0, 0.99, ssp_names[ax_idx], ha='left', va='top', fontweight='bold', transform=ax.transAxes)
         fig.text(pos_old.x0, 1, chr(ax_idx + 97), ha='center', va='top', fontweight='bold')
     if outfile is not None:
-        plt.savefig(outfile, dpi=300)
+        plt.savefig(outfile, dpi=300 if _output_resolution is None else _output_resolution)
 
 
-def plot_sensitivity_analysis(path, name=None, store_data=None, fig_numbers=None):
+def plot_sensitivity_analysis(path, name=None, store_data=None, fig_numbers=None, _output_resolution=None):
     t_max = 365
     data = {}
     abs_gains_and_losses = {}
@@ -1766,6 +1801,7 @@ def plot_sensitivity_analysis(path, name=None, store_data=None, fig_numbers=None
     )
     fig1, axs1 = plt.subplots(nrows=len(data.keys()), ncols=1, sharex=True, sharey=True,
                               figsize=(MAX_FIG_WIDTH_WIDE, MAX_FIG_WIDTH_WIDE))
+    fig1.set_facecolor('none')
     paramter_colors = ['Green', 'Blue', 'Orange']
     for row_idx, parameter in tqdm.tqdm(zip(range(len(axs1)), data.keys())):
         cmap = plt.cm.get_cmap(paramter_colors[row_idx] + 's')
@@ -1819,6 +1855,7 @@ def plot_sensitivity_analysis(path, name=None, store_data=None, fig_numbers=None
     }
     fig2, axs2 = plt.subplots(nrows=len(data.keys()), ncols=2, sharex=False, sharey=False,
                               figsize=(MAX_FIG_WIDTH_WIDE, MAX_FIG_WIDTH_WIDE))
+    fig2.set_facecolor('none')
     for row_idx, parameter in tqdm.tqdm(list(zip(range(len(axs1)), data.keys()))):
         for param_value, dataset in sorted(list(data[parameter].items())):
             for col_idx, (region_group, region_group_name) in enumerate(zip([WORLD, USA], ['global', 'USA'])):
@@ -1863,6 +1900,7 @@ def plot_sensitivity_analysis(path, name=None, store_data=None, fig_numbers=None
     fig3_aspect = fig3_size[0] / fig3_size[1]
     fig3, axs3 = plt.subplots(nrows=1, ncols=len(data.keys()) + 1, sharex=False, sharey=False,
                               figsize=fig3_size, gridspec_kw={'width_ratios': [1, 1, 1, 0.25]})
+    fig3.set_facecolor('none')
     region_groups = ['USA', 'AI:50', 'AI:75', 'AI:95']
     for ax_idx, parameter in tqdm.tqdm(enumerate(data.keys())):
         for param_value, dataset in sorted(list(data[parameter].items())):
@@ -1903,12 +1941,12 @@ def plot_sensitivity_analysis(path, name=None, store_data=None, fig_numbers=None
         ax.text(0, 1, chr(ax_idx + 97), fontweight='bold', ha='left', va='bottom', transform=ax.transAxes)
 
     if name is not None:
-        fig1.savefig("/home/robin/repos/harvey_scaling/figures/figures/sensitivity_analysis/time_series_{}.pdf".format(name),
-                     dpi=300)
-        fig2.savefig("/home/robin/repos/harvey_scaling/figures/figures/sensitivity_analysis/gains_losses_{}.pdf".format(name),
-                     dpi=300)
-        fig3.savefig("/home/robin/repos/harvey_scaling/figures/figures/sensitivity_analysis/gain_shares_{}.pdf".format(name),
-                     dpi=300)
+        fig1.savefig("/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/time_series_{}.pdf".format(name),
+                     dpi=300 if _output_resolution is None else _output_resolution)
+        fig2.savefig("/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/gains_losses_{}.pdf".format(name),
+                     dpi=300 if _output_resolution is None else _output_resolution)
+        fig3.savefig("/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/gain_shares_{}.pdf".format(name),
+                     dpi=300 if _output_resolution is None else _output_resolution)
     plt.show()
     if store_data is not None:
         for fig_number, output_data in zip(fig_numbers, [fig1_data_output, fig2_data_output, fig3_data_output]):
@@ -1934,48 +1972,51 @@ def load_simulation_data():
 if __name__ == '__main__':
     data, slope_data = load_simulation_data()
 
-    fig1a_data = make_agent_var_global_map(data, _sector='ALL_INDUSTRY-MINQ', _variable='firms_production-firms_consumption', _numbering='a', _cbar_lims=[-100, 12], _symmetric_cbar=True, _outfile="../figures/figures/maps/global_map_production_change_PRIVSECTORS-MINQ_dt0_re0.pdf")
-    fig1b_data = make_agent_var_global_map(data, _sector='MINQ', _variable='firms_production-firms_consumption', _numbering='b', _cbar_lims=[-100, 12], _symmetric_cbar=True, _outfile="../figures/figures/maps/global_map_production_change_MINQ_dt0_re0.pdf")
-    fig1a_data.to_csv("/home/robin/repos/harvey_scaling/figures/figure_data/1a.csv")
-    fig1b_data.to_csv("/home/robin/repos/harvey_scaling/figures/figure_data/1b.csv")
+    make_agent_var_global_map(data, _sector='ALL_INDUSTRY-MINQ', _variable='firms_production-firms_consumption', _cbar_lims=[-100, 12], _symmetric_cbar=True, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig1a.png", _output_resolution=600)
+    make_agent_var_global_map(data, _sector='MINQ', _variable='firms_production-firms_consumption', _cbar_lims=[-100, 12], _symmetric_cbar=True, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig1b.png", _output_resolution=600)
 
-    plot_initial_claims(_outfile="/home/robin/repos/harvey_scaling/figures/figures/harvey_initial_claims.pdf")
+    plot_initial_claims(_outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/harvey_initial_claims.png", _output_resolution=600)
 
-    plot_radius_extension_map(_numbering='a', _outfile="/home/robin/repos/harvey_scaling/figures/figures/radius_map.pdf")
-    plot_radius_extension_impact(_numbering='b', _outfile="/home/robin/repos/harvey_scaling/figures/figures/radius_extension_impact.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp6b.csv")
+    plot_radius_extension_map(_numbering='a', _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/supfig6a.png", _output_resolution=600)
+    plot_radius_extension_impact(_numbering='b', _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/supfig6a.png", _output_resolution=600)
 
-    sst_gmt_relationship(sea='Gulf of Mexico', hurricane_months_only=True, regression=True, monthly_diff_to_historical=True, outfile="/home/robin/repos/harvey_scaling/figures/figures/gulf_of_mex_sst_gmt_relationship.pdf")
+    make_heatmap(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=None, _ylabel='Global relative production\ndifference (% baseline)', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig2a.png", _output_resolution=600)
+    make_heatmap_cut(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=r'$\Delta T$ (temperature change in °C)', _ylabel='Global relative production\ndifference (% baseline)', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig2c.png", _output_resolution=600)
+    make_heatmap(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=None, _ylabel='Global relative production\ndifference (% baseline)', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig2b.png", _output_resolution=600)
+    make_heatmap_cut(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=r'$\Delta T$ (temperature change in °C)', _ylabel='Global relative production\ndifference (% baseline)', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _legend=False, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig2d.png", _output_resolution=600)
 
-    make_heatmap(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=None, _ylabel='Global relative production\ndifference (% baseline)', _numbering='a', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _outfile="/home/robin/repos/harvey_scaling/figures/figures/heatmaps/heatmap_PRIVSECTORS-MINQ_production_relative_difference_ROW_w_USA.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/2a.csv")
-    make_heatmap_cut(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=r'$\Delta T$ (temperature change in °C)', _ylabel='Global relative production\ndifference (% baseline)', _numbering='c', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _outfile="/home/robin/repos/harvey_scaling/figures/figures/heatmaps/heatmap_cut_PRIVSECTORS-MINQ_production_relative_difference_ROW_w_USA.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/2c.csv")
-    make_heatmap(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=None, _ylabel='Global relative production\ndifference (% baseline)', _numbering='b', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _outfile="/home/robin/repos/harvey_scaling/figures/figures/heatmaps/heatmap_MINQ_production_relative_difference_ROW_w_USA.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/2b.csv")
-    make_heatmap_cut(data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365 + 4).aggregate('relative_difference'), _xlabel=r'$\Delta T$ (temperature change in °C)', _ylabel='Global relative production\ndifference (% baseline)', _numbering='d', _slope_data=slope_data.get_regions('WORLD_wo_TX_LA').get_vars('firms_production-firms_consumption').get_sectors('MINQ').clip(4, 365+4).aggregate('relative_difference'), _gauss_filter=False, _sst_gmt_factor=0.8, _y_ax_precision=3, _legend=False, _outfile="/home/robin/repos/harvey_scaling/figures/figures/heatmaps/heatmap_cut_MINQ_production_relative_difference_ROW_w_USA.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/2d.csv")
+    plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), 'WORLD', data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _sst_gmt_factor=0.8, _sector_label=False, _xlabel=True, _ylabel=True, _ax_right=False, _upper_slope_labels=True, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig3a.png", _output_resolution=600)
+    plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), 'WORLD', data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _sst_gmt_factor=0.8, _sector_label=True, _xlabel=False, _ylabel=False, _ax_right=True, _upper_slope_labels=True, _major_ytick_loc=1, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig3b.png", _output_resolution=600)
+    plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), 'USA', data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _sst_gmt_factor=0.8, _sector_label=False, _xlabel=True, _ylabel=True, _ax_right=True, _upper_slope_labels=True, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig3c.png", _output_resolution=600)
+    plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), 'USA', data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _sst_gmt_factor=0.8, _sector_label=False, _xlabel=True, _ylabel=False, _ax_right=True, _upper_slope_labels=False, _minor_ytick_loc=0.5, _major_ytick_loc=1, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig3d.png", _output_resolution=600)
 
-    plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), 'WORLD', data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _sst_gmt_factor=0.8, _numbering='a', _sector_label=True, _xlabel=False, _ylabel=True, _ax_right=False, _upper_slope_labels=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/region_gains_and_losses/gains_losses_WORLD_PRIVSECTORS-MINQ.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/3a.csv")
-    plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), 'WORLD', data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _sst_gmt_factor=0.8, _numbering='b', _sector_label=True, _xlabel=False, _ylabel=False, _ax_right=True, _upper_slope_labels=True, _major_ytick_loc=1, _outfile="/home/robin/repos/harvey_scaling/figures/figures/region_gains_and_losses/gains_losses_WORLD_MINQ.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/3b.csv")
-    plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), 'USA', data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _sst_gmt_factor=0.8, _numbering='c', _sector_label=False, _xlabel=True, _ylabel=True, _ax_right=False, _upper_slope_labels=False, _outfile="/home/robin/repos/harvey_scaling/figures/figures/region_gains_and_losses/gains_losses_USA_PRIVSECTORS-MINQ.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/3c.csv")
-    plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), 'USA', data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _sst_gmt_factor=0.8, _numbering='d', _sector_label=False, _xlabel=True, _ylabel=False, _ax_right=True, _upper_slope_labels=False, _minor_ytick_loc=0.5, _major_ytick_loc=1, _outfile="/home/robin/repos/harvey_scaling/figures/figures/region_gains_and_losses/gains_losses_USA_MINQ.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/3d.csv")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _relative=True, _xlabel=True, _ylabel = True, _inplot_legend = False, _ylim=(50, 99), _minor_ytick_loc=None, _major_ytick_loc=10, _inplot_sector_label=False, _ax_right=False, _plot_regression={'AI-MQ:50': ['A', 'B', 'C', 'D'], 'AI-MQ:75': ['A', 'B','C', 'D']}, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig4a.png", _output_resolution=600)
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _relative=False, _xlabel=True, _ylabel = True, _inplot_legend = True, _ylim=(10, 35), _minor_ytick_loc=None, _major_ytick_loc=10, _inplot_sector_label=False, _ax_right=False, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig4c.png", _output_resolution=600)
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _relative=True, _xlabel=False, _ylabel = False, _inplot_legend = False, _ylim=(20, 100), _minor_ytick_loc=None, _major_ytick_loc=10, _ax_right=True, _plot_regression={'MQ:50+USA': ['A', 'B', 'C', 'D'], 'MQ:75': ['A', 'B','C', 'D']}, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig4b.png", _output_resolution=600)
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _relative=False, _xlabel=True, _ylabel = False, _inplot_legend = True, _ylim=(0, 2.1), _minor_ytick_loc=None, _major_ytick_loc=0.5, _inplot_sector_label=False, _ax_right=True, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig4d.png", _output_resolution=600)
 
-    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='a', _relative=True, _xlabel=False, _ylabel = True, _inplot_legend = False, _ylim=(50, 99), _minor_ytick_loc=None, _major_ytick_loc=10, _ax_right=False, _plot_regression={'AI-MQ:50': ['A', 'B', 'C', 'D'], 'AI-MQ:75': ['A', 'B','C', 'D']}, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_PRIVSECTORS-MINQ_AI-MQregions_rel.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/4a.csv")
-    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='c', _relative=False, _xlabel=True, _ylabel = True, _inplot_legend = True, _ylim=(10, 35), _minor_ytick_loc=None, _major_ytick_loc=10, _inplot_sector_label=False, _ax_right=False, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_PRIVSECTORS-MINQ_AI-MQregions_abs.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/4c.csv")
-    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='b', _relative=True, _xlabel=False, _ylabel = False, _inplot_legend = False, _ylim=(20, 100), _minor_ytick_loc=None, _major_ytick_loc=10, _ax_right=True, _plot_regression={'MQ:50+USA': ['A', 'B', 'C', 'D'], 'MQ:75': ['A', 'B','C', 'D']}, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_MINQ_MQregions_rel.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/4b.csv")
-    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='d', _relative=False, _xlabel=True, _ylabel = False, _inplot_legend = True, _ylim=(0, 2.1), _minor_ytick_loc=None, _major_ytick_loc=0.5, _inplot_sector_label=False, _ax_right=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_MINQ_MQregions_abs.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/4d.csv")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _relative = True, _xlabel = False, _ylim=(50, 99), _major_ytick_loc=10, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/supfig1a.png", _output_resolution=600)
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _ylabel = False, _xlabel = False, _ylim=(0, 80), _ax_right=True, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/supfig1b.png", _output_resolution=600)
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _relative = False, _ylabel = True, _ylim=(10, 35), _minor_ytick_loc=None, _major_ytick_loc=10, _inplot_legend = True, _inplot_sector_label=False, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/supfig1c.png", _output_resolution=600)
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _relative=False, _ylabel = False, _ylim=None, _minor_ytick_loc=None, _major_ytick_loc=0.5, _ax_right=True, _inplot_legend = False, _inplot_sector_label=False, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/supfig1d.png", _output_resolution=600)
 
-    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _numbering='a', _relative = True, _xlabel = False, _ylim=(50, 99), _major_ytick_loc=10, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_PRIVSECTORS-MINQ_AI-MQregions_rel.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp1a.csv")
-    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _numbering = 'b', _ylabel = False, _xlabel = False, _ylim=(0, 80), _ax_right=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_MINQ_AI-MQregions_rel.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp1b.csv")
-    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='c', _relative = False, _ylabel = True, _ylim=(10, 35), _minor_ytick_loc=None, _major_ytick_loc=10, _inplot_legend = True, _inplot_sector_label=False, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_PRIVSECTORS-MINQ_AI-MQregions_abs.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp1c.csv")
-    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['USA', 'AI-MQ:50', 'AI-MQ:75', 'AI-MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='d', _relative=False, _ylabel = False, _ylim=None, _minor_ytick_loc=None, _major_ytick_loc=0.5, _ax_right=True, _inplot_legend = False, _inplot_sector_label=False, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_MINQ_AI-MQregions_abs.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp1d.csv")
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _relative = True, _xlabel = False, _ylim=(0, 99), _major_ytick_loc=10, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/supfig2a.png", _output_resolution=600)
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _ylabel = False, _xlabel = False, _ylim=(20, 100), _ax_right=True, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/supfig2b.png", _output_resolution=600)
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _relative = False, _ylabel = True, _ylim=(0, 35), _minor_ytick_loc=None, _major_ytick_loc=10, _inplot_legend=True, _inplot_sector_label=False, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/supfig2c.png", _output_resolution=600)
+    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _relative=False, _ylabel = False, _ylim=(0, 1.8), _minor_ytick_loc=None, _major_ytick_loc=0.5, _ax_right=True, _inplot_legend=False, _inplot_sector_label=False, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/supfig2d.png", _output_resolution=600)
 
-    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _numbering='a', _relative = True, _xlabel = False, _ylim=(0, 99), _major_ytick_loc=10, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_PRIVSECTORS-MINQ_MQregions_rel.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp2a.csv")
-    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _inplot_legend=False, _numbering = 'b', _ylabel = False, _xlabel = False, _ylim=(20, 100), _ax_right=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_MINQ_MQregions_rel.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp2b.csv")
-    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='c', _relative = False, _ylabel = True, _ylim=(0, 35), _minor_ytick_loc=None, _major_ytick_loc=10, _inplot_legend = True, _inplot_sector_label=False, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_PRIVSECTORS-MINQ_MQregions_abs.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp2c.csv")
-    plot_global_shares_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), _region_groups=['MQ:50', 'MQ:50+USA', 'MQ:75', 'MQ:95'], _sst_gmt_factor=0.8, _bar_reg_label=False, _numbering='d', _relative=False, _ylabel = False, _ylim=(0, 1.8), _minor_ytick_loc=None, _major_ytick_loc=0.5, _ax_right=True, _inplot_legend = False, _inplot_sector_label=False, _outfile="/home/robin/repos/harvey_scaling/figures/figures/gain_shares/gain_shares_supp_MINQ_MQregions_abs.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp2d.csv")
+    plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), region='USA', _sst_gmt_factor=0.8, _sector_label=False, _xlabel=True, _legend=True, _ax_right=True, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig5a.png", _output_resolution=600)
+    plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), region='USA', _sst_gmt_factor=0.8, _sector_label=True, _xlabel=False, _ylabel=False, _legend=False, _ax_right=True, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig5b.png", _output_resolution=600)
+    plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), region='WORLD', _sst_gmt_factor=0.8, _sector_label=False, _xlabel=True, _legend=False, _ax_right=False, _remove_upper_tick=True, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig5c.png", _output_resolution=600)
+    plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), region='WORLD', _sst_gmt_factor=0.8, _sector_label=False, _xlabel=True, _legend=False, _ylabel=False, _ax_right=True, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig5d.png", _output_resolution=600)
 
-    plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), region='USA', _sst_gmt_factor=0.8, _numbering='a', _sector_label=True, _xlabel=False, _legend=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/compensation_gap/compensation_gap_PRIVSECTORS-MINQ_USA.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/5a.csv")
-    plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), region='USA', _sst_gmt_factor=0.8, _numbering='b', _sector_label=True, _xlabel=False, _ylabel=False, _legend=False, _ax_right=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/compensation_gap/compensation_gap_MINQ_USA.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/5b.csv")
-    plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), region='WORLD', _sst_gmt_factor=0.8, _numbering='c', _sector_label=False, _xlabel=True, _legend=False, _remove_upper_tick=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/compensation_gap/compensation_gap_PRIVSECTORS-MINQ_WORLD.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/5c.csv")
-    plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('MINQ'), region='WORLD', _sst_gmt_factor=0.8, _numbering='d', _sector_label=False, _xlabel=True, _legend=False, _ylabel=False, _ax_right=True, _outfile="/home/robin/repos/harvey_scaling/figures/figures/compensation_gap/compensation_gap_MINQ_WORLD.pdf", store_data="/home/robin/repos/harvey_scaling/figures/figure_data/5d.csv")
+    plot_compensation_gap(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), region='WORLD', _t_agg=182, _sst_gmt_factor=0.8, _sector_label=False, _xlabel=True, _legend=True, _ax_right=False, _remove_upper_tick=True, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig5c_t182.png", _output_resolution=600)
+    plot_gains_and_losses_from_slope_dataset(slope_data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), 'WORLD', data.get_vars('firms_production-firms_consumption').get_sectors('ALL_INDUSTRY-MINQ'), _t_agg=182, _sst_gmt_factor=0.8, _sector_label=False, _xlabel=True, _ylabel=True, _ax_right=False, _upper_slope_labels=True, _outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/fig3a_t182.png", _output_resolution=600)
 
-    plot_sensitivity_analysis(path="/home/robin/repos/harvey_scaling/data/acclimate_output/sensitivity_analysis/2022-05-13_18:58:04unscaled/", name='unscaled', store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp{}.csv", fig_numbers=[7, 9, 11])
-    plot_sensitivity_analysis(path="/home/robin/repos/harvey_scaling/data/acclimate_output/sensitivity_analysis/2022-05-13_18:44:11maximum_scaled/", name='max_scaled', store_data="/home/robin/repos/harvey_scaling/figures/figure_data/supp{}.csv", fig_numbers=[8, 10, 12])
-    pass
+    plot_sensitivity_analysis(path="/home/robin/repos/harvey_scaling/data/acclimate_output/sensitivity_analysis/2022-05-13_18:58:04unscaled/", name='unscaled', _output_resolution=600)
+    plot_sensitivity_analysis(path="/home/robin/repos/harvey_scaling/data/acclimate_output/sensitivity_analysis/2022-05-13_18:44:11maximum_scaled/", name='max_scaled', _output_resolution=600)
+
+    sst_gmt_relationship(sea='Gulf of Mexico', hurricane_months_only=True, regression=True,
+                         monthly_diff_to_historical=True,
+                         outfile="/home/robin/Documents/01_Uni Potsdam/Promotion/03_Disputation_vortrag/graphics/paper_figures/harvey_paper/png/supp/supfig4.png",
+                         _output_resolution=600)
